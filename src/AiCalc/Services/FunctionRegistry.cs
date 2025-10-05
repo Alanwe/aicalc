@@ -79,7 +79,7 @@ public class FunctionRegistry
             {
                 await Task.CompletedTask;
                 var path = ctx.Arguments.FirstOrDefault()?.DisplayValue ?? string.Empty;
-                var json = """[{"name":"sample.txt","size":1024},{"name":"image.png","size":2048}]""";
+                var json = $"[{{"name":"sample.txt","size":1024}},{{"name":"image.png","size":2048}}]";
                 return new FunctionExecutionResult(new CellValue(CellObjectType.Table, json, $"Directory snapshot: {path}"));
             },
             new FunctionParameter("directory", "Directory path", CellObjectType.Directory)));

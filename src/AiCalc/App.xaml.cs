@@ -12,7 +12,7 @@ public partial class App : Application
         this.UnhandledException += OnUnhandledException;
     }
 
-    private void OnUnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e)
+    private void OnUnhandledException(object sender, UnhandledExceptionEventArgs e)
     {
         System.Diagnostics.Debug.WriteLine($"Unhandled exception: {e.Exception}" );
     }

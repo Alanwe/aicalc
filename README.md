@@ -29,21 +29,13 @@ src/
 
 ## Getting started
 
-1. Install the [UNO Platform prerequisites](https://platform.uno/docs/articles/get-started.html). At minimum you'll need the .NET 8 SDK and the Uno templates:
-   ```bash
-   # Install the Uno project templates for dotnet new
-   dotnet new install Uno.ProjectTemplates.Dotnet
-
-   # (Optional) Verify your environment
-   dotnet tool install -g uno.check
-   uno-check
-   ```
+1. Install the [UNO Platform prerequisites](https://platform.uno/docs/articles/get-started.html).
 2. Restore and build the solution:
    ```bash
    dotnet restore
-   dotnet build -f net8.0
+   dotnet build
    ```
-3. Run the desired head (Windows, WebAssembly, Android, iOS, or macOS) from Visual Studio or with `dotnet run -f net8.0-windows10.0.19041.0`.
+3. Run the desired head (Windows, WebAssembly, Android, iOS, or macOS) from Visual Studio or with `dotnet run -f net7.0-windows`.
 
 ## Extending the function catalog
 

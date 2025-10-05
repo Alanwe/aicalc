@@ -10,7 +10,7 @@ namespace AiCalc.Services;
 
 public class FunctionRunner
 {
-    private static readonly Regex FunctionRegex = new(@"^=?(?<name>[A-Z0-9_]+)\((?<args>.*)\)$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex FunctionRegex = new("^=?(?<name>[A-Z0-9_]+)\((?<args>.*)\)$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     public FunctionRunner(FunctionRegistry registry)
     {
