@@ -45,7 +45,7 @@ Yes
 
 ---
 
-### Task 3: Enhanced Function Library
+### Task 2: Implement Type-Specific Function Registry
 **Goal**: Expand built-in function catalog
 **Dependencies**: Task 2
 **Details**:
@@ -77,6 +77,7 @@ Yes
 
 **Questions**:
 - Should Enter behavior be configurable (move down vs stay)?
+Yes that would be nice, perhaps we can build a settings configurations tab in the menu
 
 ---
 
@@ -94,7 +95,9 @@ Yes
 
 **Questions**:
 - Should we support Excel-style named ranges?
+Yes the functions should accept ranges which would be an array/matrix of class objects.
 - Do you want syntax highlighting in formula bar?
+Not sure I understand, I will take your recommendation
 
 ---
 
@@ -110,8 +113,8 @@ Yes
 - Add visual indicator when cell is in value vs formula state
 
 **Questions**:
-- Should value state lock the cell from formula evaluation?
-- Do you want a side-by-side preview for Markdown?
+- Should value state lock the cell from formula evaluation? Yes
+- Do you want a side-by-side preview for Markdown? Yes please
 
 ---
 
@@ -129,7 +132,9 @@ Yes
 
 **Questions**:
 - Should spill operations be automatic (like Excel dynamic arrays)?
+The Spill should shift columns impacted to the right and impacted rows down. The whole column and row should shift the number of cells
 - What should happen to references when cells are deleted?
+The cells which reference the deleted should be flagged as error and the value set to N/A like excel
 
 ---
 
@@ -138,52 +143,99 @@ Yes
 ### Task 8: Dependency Graph (DAG) Implementation
 **Goal**: Track cell dependencies for efficient evaluation
 **Dependencies**: None (can run parallel)
+**Status**: ✅ COMPLETE
 **Details**:
-- Implement Directed Acyclic Graph (DAG) for cell relationships
-- Parse formulas to extract cell references
-- Build dependency tree (which cells depend on which)
-- Detect circular reference loops (show error)
-- Detect duplicate calculations
-- Use linked list structure for efficient traversal
+- ✅ Implement Directed Acyclic Graph (DAG) for cell relationships
+- ✅ Parse formulas to extract cell references
+- ✅ Build dependency tree (which cells depend on which)
+- ✅ Detect circular reference loops (show error)
+- ✅ Detect duplicate calculations
+- ✅ Use linked list structure for efficient traversal
+
+**Implementation**: See `src/AiCalc.WinUI/Services/DependencyGraph.cs`
 
 **Questions**:
-- Should circular references be blocked or allowed with iteration limit?
+- Should circular references be blocked or allowed with iteration limit? An Error should be flagged ✅ DONE
 - How many levels of dependency should be visualized in UI?
+The dependency shouldnt normally be visualised, this should be managed quietly as Excel does it. ✅ DONE
 
 ---
 
 ### Task 9: Multi-Threaded Cell Evaluation
 **Goal**: Parallel formula evaluation
 **Dependencies**: Task 8
+**Status**: ⚠️ 70% COMPLETE (Core done, Settings UI pending)
 **Details**:
-- Implement topological sort of dependency graph
-- Evaluate independent cells in parallel threads
-- Use Task Parallel Library (TPL) for async evaluation
-- Show progress indicator for large workbooks
-- Implement cancellation tokens for long-running operations
-- Add timeout configuration for AI functions
-- Queue system for batch evaluation
+- ✅ Implement topological sort of dependency graph
+- ✅ Evaluate independent cells in parallel threads
+- ✅ Use Task Parallel Library (TPL) for async evaluation
+- ✅ Show progress indicator for large workbooks
+- ✅ Implement cancellation tokens for long-running operations
+- ✅ Add timeout configuration for AI functions (100s default)
+- ✅ Queue system for batch evaluation
+- ⏳ Settings UI for thread count configuration (PENDING)
+- ⏳ Per-service timeout configuration (PENDING)
+
+**Implementation**: See `src/AiCalc.WinUI/Services/EvaluationEngine.cs`
+
+**Remaining Work** (~5-7 hours):
+1. Create/extend SettingsDialog.xaml with Performance section
+2. Add slider for MaxDegreeOfParallelism (1-32, default: CPU count)
+3. Add input for DefaultTimeoutSeconds (10-300, default: 100)
+4. Save settings to WorkbookSettings
+5. Wire up settings to EvaluationEngine
 
 **Questions**:
 - What should be the default timeout for AI functions?
+We should default to 100 seconds, this should be configurable a the AI Service definition ✅ DONE
 - Should users be able to configure thread count?
+This would be good as an option in the settings menu ⏳ PENDING
 
 ---
 
 ### Task 10: Cell Change Visualization
 **Goal**: Visual feedback for cell updates
 **Dependencies**: Task 9
+**Status**: ⚠️ 70% COMPLETE (Visual states done, F9 & themes pending)
 **Details**:
-- When cell value changes: Flash green border for 2 seconds
-- When cell is stale (needs recalc): Show blue border
-- Manual update mode: Show orange indicator
-- Add update timestamp to cell metadata
-- Show "calculating..." spinner during evaluation
-- Highlight cells in dependency chain when selected
+- ✅ When cell value changes: Flash green border for 2 seconds
+- ✅ When cell is stale (needs recalc): Show blue border
+- ✅ Manual update mode: Show orange indicator
+- ✅ Add update timestamp to cell metadata
+- ✅ Show "calculating..." spinner during evaluation
+- ✅ Highlight cells in dependency chain when selected
+- ⏳ F9 keyboard shortcut for recalculate all (PENDING)
+- ⏳ Recalculate All button in toolbar (PENDING)
+- ⏳ Theme system with customizable colors (PENDING)
+
+**Implementation**: See:
+- `src/AiCalc.WinUI/Models/CellVisualState.cs`
+- `src/AiCalc.WinUI/Converters/CellVisualStateToBrushConverter.cs`
+- `src/AiCalc.WinUI/ViewModels/CellViewModel.cs` (MarkAsStale, MarkAsCalculating, MarkAsUpdated methods)
+
+**Remaining Work** (~7-9 hours):
+1. **F9 Recalculation** (~2-3 hours):
+   - Add KeyboardAccelerator in MainWindow.xaml
+   - Create RecalculateAllCommand in SheetViewModel
+   - Filter out Manual automation mode cells
+   - Show progress during recalc
+
+2. **Recalculate All Button** (~30 minutes):
+   - Add button to toolbar
+   - Bind to same command as F9
+   - Tooltip: "Recalculate All (F9)"
+
+3. **Theme System** (~4-5 hours):
+   - Create theme resource dictionaries (Light/Dark/High Contrast)
+   - Modify converter to use theme resources
+   - Add theme selector to Settings
+   - Support custom color overrides
 
 **Questions**:
 - Should color scheme be customizable/theme-aware?
+Yes please. Perhaps some set themes which can be customised further? ⏳ PENDING
 - Do you want a "recalculate all" button?
+Yes and also this should be available as F9 like excel. However this should not apply to cells flags to manual which should be excluded. ⏳ PENDING
 
 ---
 
@@ -203,7 +255,10 @@ Yes
 
 **Questions**:
 - Should API keys be stored per-workbook or globally?
+For now lets go global 
 - Do you want usage/cost reporting dashboard?
+Yes, It would need to be usage for Basic plan as we wont know the actual costs
+Some usage charts per service and perhaps average Tokens and avg latency would be useful
 
 ---
 
@@ -221,7 +276,9 @@ Yes
 
 **Questions**:
 - Should there be a default model per function type?
+The AI Service should configure the model deployment, this is then linked to the functions so we can look it up
 - Do you want a history of AI generations for each cell?
+Can we have a log mode in settings, default is no
 
 ---
 
