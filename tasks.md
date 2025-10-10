@@ -39,7 +39,9 @@ Examples could be PDFtoPageText(split into pages), PDFChartImage(Extract charts 
 
 **Questions**:
 - Should functions be able to accept multiple input types (polymorphic)?
+Yes, Functions should be able to take multiple class objects as parameters, but each function parameter position should force acceptable classes
 - Do you want a visual categorization in the Functions panel?
+Yes
 
 ---
 
