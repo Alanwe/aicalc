@@ -4,18 +4,18 @@ using Microsoft.UI.Xaml.Data;
 
 namespace AiCalc.Converters;
 
-public class BooleanToVisibilityConverter : IValueConverter
+public class InverseBooleanToVisibilityConverter : IValueConverter
 {
-    public bool CollapseWhenFalse { get; set; } = true;
+    public bool CollapseWhenTrue { get; set; } = true;
 
     public object Convert(object value, Type targetType, object parameter, string language)
     {
         if (value is bool flag && flag)
         {
-            return Visibility.Visible;
+            return CollapseWhenTrue ? Visibility.Collapsed : Visibility.Collapsed;
         }
 
-        return CollapseWhenFalse ? Visibility.Collapsed : Visibility.Hidden;
+        return Visibility.Visible;
     }
 
     public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new NotSupportedException();

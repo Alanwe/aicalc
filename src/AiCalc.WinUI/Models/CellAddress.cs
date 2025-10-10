@@ -67,7 +67,7 @@ public readonly record struct CellAddress(string SheetName, int Row, int Column)
         {
             int modulo = (dividend - 1) % 26;
             columnName = Convert.ToChar('A' + modulo) + columnName;
-            dividend = (dividend - modulo) // 26;
+            dividend = (dividend - modulo) / 26;
         }
 
         return columnName;

@@ -1,12 +1,13 @@
 <Application
     x:Class="AiCalc.App"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:local="using:AiCalc">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+                <!-- Cell State Themes (Task 10) - Loaded dynamically in App.xaml.cs -->
+                <ResourceDictionary Source="Themes/CellStateThemes.xaml"/>
             </ResourceDictionary.MergedDictionaries>
             <SolidColorBrush x:Key="SpreadsheetBackgroundBrush" Color="#FF101820" />
             <SolidColorBrush x:Key="SpreadsheetCardBrush" Color="#FF1E2A33" />
@@ -22,6 +23,15 @@
                 <Setter Property="BorderBrush" Value="Transparent" />
                 <Setter Property="FontFamily" Value="{StaticResource BodyFont}" />
             </Style>
+            
+            <!-- Default Cell State Colors (Light Theme) - Task 10 -->
+            <SolidColorBrush x:Key="CellStateJustUpdatedBrush" Color="#32CD32"/><!-- LimeGreen -->
+            <SolidColorBrush x:Key="CellStateCalculatingBrush" Color="#FFA500"/><!-- Orange -->
+            <SolidColorBrush x:Key="CellStateStaleBrush" Color="#1E90FF"/><!-- DodgerBlue -->
+            <SolidColorBrush x:Key="CellStateManualUpdateBrush" Color="#FFA500"/><!-- Orange -->
+            <SolidColorBrush x:Key="CellStateErrorBrush" Color="#DC143C"/><!-- Crimson -->
+            <SolidColorBrush x:Key="CellStateInDependencyChainBrush" Color="#FFD700"/><!-- Gold -->
+            <SolidColorBrush x:Key="CellStateNormalBrush" Color="Transparent"/>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

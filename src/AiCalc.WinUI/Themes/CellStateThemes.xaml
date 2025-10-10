@@ -1,0 +1,49 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Light Theme (Default) -->
+    <ResourceDictionary x:Key="LightTheme">
+        <SolidColorBrush x:Key="CellStateJustUpdatedBrush" Color="#32CD32"/><!-- LimeGreen -->
+        <SolidColorBrush x:Key="CellStateCalculatingBrush" Color="#FFA500"/><!-- Orange -->
+        <SolidColorBrush x:Key="CellStateStaleBrush" Color="#1E90FF"/><!-- DodgerBlue -->
+        <SolidColorBrush x:Key="CellStateManualUpdateBrush" Color="#FFA500"/><!-- Orange -->
+        <SolidColorBrush x:Key="CellStateErrorBrush" Color="#DC143C"/><!-- Crimson -->
+        <SolidColorBrush x:Key="CellStateInDependencyChainBrush" Color="#FFD700"/><!-- Gold -->
+        <SolidColorBrush x:Key="CellStateNormalBrush" Color="Transparent"/>
+    </ResourceDictionary>
+
+    <!-- Dark Theme -->
+    <ResourceDictionary x:Key="DarkTheme">
+        <SolidColorBrush x:Key="CellStateJustUpdatedBrush" Color="#00FF7F"/><!-- SpringGreen -->
+        <SolidColorBrush x:Key="CellStateCalculatingBrush" Color="#FF8C00"/><!-- DarkOrange -->
+        <SolidColorBrush x:Key="CellStateStaleBrush" Color="#87CEEB"/><!-- SkyBlue -->
+        <SolidColorBrush x:Key="CellStateManualUpdateBrush" Color="#FF8C00"/><!-- DarkOrange -->
+        <SolidColorBrush x:Key="CellStateErrorBrush" Color="#FF4444"/><!-- Bright Red -->
+        <SolidColorBrush x:Key="CellStateInDependencyChainBrush" Color="#FFD700"/><!-- Gold -->
+        <SolidColorBrush x:Key="CellStateNormalBrush" Color="Transparent"/>
+    </ResourceDictionary>
+
+    <!-- High Contrast Theme -->
+    <ResourceDictionary x:Key="HighContrastTheme">
+        <SolidColorBrush x:Key="CellStateJustUpdatedBrush" Color="#00FF00"/><!-- Lime -->
+        <SolidColorBrush x:Key="CellStateCalculatingBrush" Color="#FF6600"/><!-- Bright Orange -->
+        <SolidColorBrush x:Key="CellStateStaleBrush" Color="#00FFFF"/><!-- Cyan -->
+        <SolidColorBrush x:Key="CellStateManualUpdateBrush" Color="#FF6600"/><!-- Bright Orange -->
+        <SolidColorBrush x:Key="CellStateErrorBrush" Color="#FF0000"/><!-- Pure Red -->
+        <SolidColorBrush x:Key="CellStateInDependencyChainBrush" Color="#FFFF00"/><!-- Yellow -->
+        <SolidColorBrush x:Key="CellStateNormalBrush" Color="Transparent"/>
+    </ResourceDictionary>
+
+    <!-- Custom Theme (User can override) -->
+    <ResourceDictionary x:Key="CustomTheme">
+        <SolidColorBrush x:Key="CellStateJustUpdatedBrush" Color="#32CD32"/><!-- Default to Light -->
+        <SolidColorBrush x:Key="CellStateCalculatingBrush" Color="#FFA500"/>
+        <SolidColorBrush x:Key="CellStateStaleBrush" Color="#1E90FF"/>
+        <SolidColorBrush x:Key="CellStateManualUpdateBrush" Color="#FFA500"/>
+        <SolidColorBrush x:Key="CellStateErrorBrush" Color="#DC143C"/>
+        <SolidColorBrush x:Key="CellStateInDependencyChainBrush" Color="#FFD700"/>
+        <SolidColorBrush x:Key="CellStateNormalBrush" Color="Transparent"/>
+    </ResourceDictionary>
+
+</ResourceDictionary>

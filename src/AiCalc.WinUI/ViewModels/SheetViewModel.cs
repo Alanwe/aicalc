@@ -46,15 +46,30 @@ public class SheetViewModel
 
     public IEnumerable<CellViewModel> Cells => Rows.SelectMany(r => r.Cells);
 
+    /// <summary>
+    /// Evaluate all cells in this sheet using multi-threaded evaluation engine
+    /// Skips cells with Manual automation mode per Task 10 requirement
+    /// </summary>
     public async Task EvaluateAllAsync()
     {
-        foreach (var cell in Cells.Where(c => c.HasFormula))
+        var cellsToEvaluate = Cells
+            .Where(c => c.HasFormula && c.AutomationMode != CellAutomationMode.Manual)
+            .ToDictionary(c => c.Address, c => c);
+
+        if (cellsToEvaluate.Count == 0)
         {
-            if (cell.AutomationMode != CellAutomationMode.Manual)
-            {
-                await cell.EvaluateAsync();
-            }
+            return;
         }
+
+        await _workbook.EvaluationEngine.EvaluateAllAsync(cellsToEvaluate);
+    }
+
+    /// <summary>
+    /// Update dependency graph when a cell's formula changes
+    /// </summary>
+    public void UpdateCellDependencies(CellViewModel cell)
+    {
+        _workbook.DependencyGraph.UpdateCellDependencies(cell.Address, cell.Formula);
     }
 
     private RowViewModel CreateRow(int rowIndex, int columnCount)

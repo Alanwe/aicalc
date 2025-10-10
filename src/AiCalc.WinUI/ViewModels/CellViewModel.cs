@@ -46,6 +46,18 @@ public partial class CellViewModel : ObservableObject
     [ObservableProperty]
     private bool _isSelected;
     
+    [ObservableProperty]
+    private CellVisualState _visualState = CellVisualState.Normal;
+    
+    [ObservableProperty]
+    private bool _isCalculating;
+    
+    [ObservableProperty]
+    private DateTime? _lastUpdated;
+    
+    [ObservableProperty]
+    private bool _isStale;
+    
     private ICellObject? _cellObject;
     
     public ICellObject CellObject
@@ -117,17 +129,22 @@ public partial class CellViewModel : ObservableObject
 
         try
         {
+            MarkAsCalculating();
             _workbook.IsBusy = true;
             _workbook.StatusMessage = $"Evaluating {Address}...";
+            
             var result = await _workbook.FunctionRunner.EvaluateAsync(this, Formula);
             if (result is not null)
             {
                 Value = result.Value;
+                MarkAsUpdated();
             }
         }
         catch (Exception ex)
         {
             Value = new CellValue(CellObjectType.Error, ex.Message, ex.Message);
+            VisualState = CellVisualState.Error;
+            IsCalculating = false;
         }
         finally
         {
@@ -138,6 +155,58 @@ public partial class CellViewModel : ObservableObject
 
     [RelayCommand]
     private Task RunAsync() => EvaluateAsync();
+    
+    /// <summary>
+    /// Marks this cell as stale (needs recalculation)
+    /// </summary>
+    public void MarkAsStale()
+    {
+        IsStale = true;
+        if (VisualState == CellVisualState.Normal)
+        {
+            VisualState = CellVisualState.Stale;
+        }
+    }
+    
+    /// <summary>
+    /// Marks this cell as calculating
+    /// </summary>
+    public void MarkAsCalculating()
+    {
+        IsCalculating = true;
+        VisualState = CellVisualState.Calculating;
+    }
+    
+    /// <summary>
+    /// Marks this cell as updated and triggers visual flash effect
+    /// </summary>
+    public async void MarkAsUpdated()
+    {
+        IsStale = false;
+        IsCalculating = false;
+        LastUpdated = DateTime.Now;
+        VisualState = CellVisualState.JustUpdated;
+        
+        // Flash effect: return to normal after 2 seconds
+        await Task.Delay(2000);
+        if (VisualState == CellVisualState.JustUpdated)
+        {
+            VisualState = CellVisualState.Normal;
+        }
+    }
+    
+    /// <summary>
+    /// Clears all visual states
+    /// </summary>
+    public void ClearVisualState()
+    {
+        IsStale = false;
+        IsCalculating = false;
+        if (VisualState != CellVisualState.Error)
+        {
+            VisualState = CellVisualState.Normal;
+        }
+    }
 
     partial void OnValueChanged(CellValue value)
     {

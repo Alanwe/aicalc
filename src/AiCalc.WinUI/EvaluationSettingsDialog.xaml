@@ -1,0 +1,103 @@
+<ContentDialog
+    x:Class="AiCalc.EvaluationSettingsDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Title="Evaluation Settings"
+    PrimaryButtonText="Save"
+    CloseButtonText="Cancel"
+    DefaultButton="Primary"
+    PrimaryButtonClick="ContentDialog_PrimaryButtonClick">
+
+    <ScrollViewer>
+        <StackPanel Spacing="20" Padding="4">
+            <!-- Thread Count Section -->
+            <StackPanel Spacing="8">
+                <TextBlock Text="Multi-Threading" 
+                           FontSize="16" 
+                           FontWeight="SemiBold"/>
+                
+                <TextBlock Text="Maximum Parallel Threads"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    
+                    <Slider x:Name="ThreadCountSlider"
+                            Grid.Column="0"
+                            Minimum="1"
+                            Maximum="32"
+                            StepFrequency="1"
+                            TickFrequency="4"
+                            TickPlacement="BottomRight"
+                            ValueChanged="ThreadCountSlider_ValueChanged"
+                            Margin="0,0,12,0"/>
+                    
+                    <TextBlock x:Name="ThreadCountLabel"
+                               Grid.Column="1"
+                               Text="8"
+                               FontWeight="SemiBold"
+                               FontSize="18"
+                               VerticalAlignment="Center"
+                               MinWidth="40"
+                               TextAlignment="Center"/>
+                </Grid>
+                
+                <TextBlock x:Name="ThreadCountDescription"
+                           Text="Using 8 threads (CPU cores detected: 8)"
+                           FontSize="12"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+            </StackPanel>
+
+            <!-- Timeout Section -->
+            <StackPanel Spacing="8">
+                <TextBlock Text="Evaluation Timeout" 
+                           FontSize="16" 
+                           FontWeight="SemiBold"/>
+                
+                <TextBlock Text="Default timeout for cell evaluation (seconds)"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                
+                <NumberBox x:Name="TimeoutNumberBox"
+                           Minimum="10"
+                           Maximum="600"
+                           SpinButtonPlacementMode="Inline"
+                           SmallChange="10"
+                           LargeChange="50"
+                           Value="100"/>
+                
+                <TextBlock Text="Recommended: 100 seconds for AI functions, 30 seconds for built-in functions"
+                           FontSize="12"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                           TextWrapping="Wrap"/>
+            </StackPanel>
+
+            <!-- Info Section -->
+            <Border Background="{ThemeResource LayerFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="4"
+                    Padding="12">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="ℹ️ Information" 
+                               FontWeight="SemiBold"/>
+                    <TextBlock TextWrapping="Wrap"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}">
+                        <Run Text="• Thread count controls how many cells can be evaluated simultaneously"/>
+                        <LineBreak/>
+                        <Run Text="• Higher thread count improves performance for large workbooks"/>
+                        <LineBreak/>
+                        <Run Text="• Timeout prevents long-running operations from freezing the UI"/>
+                        <LineBreak/>
+                        <Run Text="• These settings apply to all workbooks"/>
+                    </TextBlock>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</ContentDialog>

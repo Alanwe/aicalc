@@ -20,10 +20,20 @@ public partial class WorkbookViewModel : BaseViewModel
         Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
     };
 
+    private readonly DependencyGraph _dependencyGraph;
+    private readonly EvaluationEngine _evaluationEngine;
+
     public WorkbookViewModel()
     {
         FunctionRegistry = new FunctionRegistry();
         FunctionRunner = new FunctionRunner(FunctionRegistry);
+        _dependencyGraph = new DependencyGraph();
+        _evaluationEngine = new EvaluationEngine(
+            _dependencyGraph, 
+            FunctionRunner,
+            Settings.MaxEvaluationThreads,
+            Settings.DefaultEvaluationTimeoutSeconds);
+        
         Sheets = new ObservableCollection<SheetViewModel>();
         Settings.Connections.Add(new WorkspaceConnection { Name = "Local Python Runtime", Provider = "Python", Endpoint = "local://python", IsDefault = true });
         Settings.Connections.Add(new WorkspaceConnection { Name = "Ollama", Provider = "Ollama", Endpoint = "http://localhost:11434" });
@@ -35,6 +45,10 @@ public partial class WorkbookViewModel : BaseViewModel
     public FunctionRegistry FunctionRegistry { get; }
 
     public FunctionRunner FunctionRunner { get; }
+
+    public DependencyGraph DependencyGraph => _dependencyGraph;
+
+    public EvaluationEngine EvaluationEngine => _evaluationEngine;
 
     public ObservableCollection<SheetViewModel> Sheets { get; }
 
@@ -106,10 +120,39 @@ public partial class WorkbookViewModel : BaseViewModel
     [RelayCommand]
     private async Task EvaluateWorkbookAsync()
     {
-        foreach (var sheet in Sheets)
+        // Recalculate All (F9) - Skip Manual cells per Task 10
+        var cellsToEvaluate = Sheets
+            .SelectMany(s => s.Cells)
+            .Where(c => c.HasFormula && c.AutomationMode != CellAutomationMode.Manual)
+            .ToDictionary(c => c.Address, c => c);
+
+        if (cellsToEvaluate.Count == 0)
         {
-            await sheet.EvaluateAllAsync();
+            StatusMessage = "No cells to evaluate";
+            return;
         }
+
+        StatusMessage = $"Evaluating {cellsToEvaluate.Count} cells...";
+        
+        var result = await _evaluationEngine.EvaluateAllAsync(cellsToEvaluate);
+        
+        if (result.Success)
+        {
+            StatusMessage = $"✅ Evaluated {result.CellsEvaluated} cells in {result.Duration.TotalSeconds:F2}s";
+        }
+        else
+        {
+            StatusMessage = $"⚠️ Evaluated {result.CellsEvaluated} cells, {result.CellsFailed} failed";
+        }
+    }
+
+    /// <summary>
+    /// Updates evaluation engine settings from WorkbookSettings
+    /// </summary>
+    public void UpdateEvaluationSettings()
+    {
+        _evaluationEngine.MaxDegreeOfParallelism = Settings.MaxEvaluationThreads;
+        _evaluationEngine.DefaultTimeoutSeconds = Settings.DefaultEvaluationTimeoutSeconds;
     }
 
     [RelayCommand]

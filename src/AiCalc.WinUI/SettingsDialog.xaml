@@ -1,0 +1,331 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ContentDialog
+    x:Class="AiCalc.SettingsDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:models="using:AiCalc.Models"
+    xmlns:conv="using:AiCalc.Converters"
+    mc:Ignorable="d"
+    Title="Settings"
+    PrimaryButtonText="Save"
+    CloseButtonText="Cancel"
+    DefaultButton="Primary"
+    Style="{StaticResource DefaultContentDialogStyle}">
+
+    <ContentDialog.Resources>
+        <conv:ObjectToBoolConverter x:Key="ObjectToBoolConverter" />
+        <Style x:Key="SettingsSectionStyle" TargetType="Border">
+            <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+            <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Padding" Value="16" />
+            <Setter Property="Margin" Value="0,0,0,12" />
+        </Style>
+    </ContentDialog.Resources>
+
+    <ScrollViewer MaxHeight="600" MaxWidth="800">
+        <Pivot>
+            <!-- AI Services Tab -->
+            <PivotItem Header="AI Services">
+                <StackPanel Spacing="16">
+                    <Border Style="{StaticResource SettingsSectionStyle}">
+                        <StackPanel Spacing="12">
+                            <TextBlock Text="AI Services" 
+                                       Style="{StaticResource SubtitleTextBlockStyle}" />
+                            <TextBlock Text="Configure AI cloud service connections for your functions" 
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       TextWrapping="Wrap"
+                                       Margin="0,0,0,8" />
+
+                            <!-- Services List -->
+                            <ListView x:Name="ServicesListView"
+                                      ItemsSource="{x:Bind Settings.Connections, Mode=OneWay}"
+                                      SelectionMode="Single"
+                                      Height="240"
+                                      BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                                      BorderThickness="1"
+                                      CornerRadius="4">
+                                <ListView.ItemTemplate>
+                                    <DataTemplate x:DataType="models:WorkspaceConnection">
+                                        <Grid Padding="8" ColumnSpacing="12">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+
+                                            <!-- Icon -->
+                                            <FontIcon Grid.Column="0" 
+                                                      Glyph="&#xE753;" 
+                                                      FontSize="24"
+                                                      Foreground="{ThemeResource AccentFillColorDefaultBrush}" />
+
+                                            <!-- Service Info -->
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
+                                                <TextBlock Text="{x:Bind Name}" 
+                                                           FontWeight="SemiBold" />
+                                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                                    <TextBlock Text="{x:Bind Provider}" 
+                                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                               FontSize="12" />
+                                                    <TextBlock Text="•" 
+                                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                               FontSize="12" />
+                                                    <TextBlock Text="{x:Bind Model}" 
+                                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                               FontSize="12" />
+                                                </StackPanel>
+                                            </StackPanel>
+
+                                            <!-- Default Badge -->
+                                            <Border Grid.Column="2" 
+                                                    Background="{ThemeResource AccentFillColorDefaultBrush}"
+                                                    CornerRadius="4"
+                                                    Padding="8,4"
+                                                    Visibility="{x:Bind IsDefault}">
+                                                <TextBlock Text="Default" 
+                                                           FontSize="11"
+                                                           FontWeight="SemiBold"
+                                                           Foreground="White" />
+                                            </Border>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+
+                            <!-- Service Actions -->
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button Content="Add Service" 
+                                        Click="AddService_Click"
+                                        Style="{StaticResource AccentButtonStyle}">
+                                    <Button.KeyboardAccelerators>
+                                        <KeyboardAccelerator Key="N" Modifiers="Control" />
+                                    </Button.KeyboardAccelerators>
+                                </Button>
+                                <Button Content="Edit" 
+                                        Click="EditService_Click"
+                                        IsEnabled="{x:Bind ServicesListView.SelectedItem, Mode=OneWay, Converter={StaticResource ObjectToBoolConverter}}" />
+                                <Button Content="Remove" 
+                                        Click="RemoveService_Click"
+                                        IsEnabled="{x:Bind ServicesListView.SelectedItem, Mode=OneWay, Converter={StaticResource ObjectToBoolConverter}}" />
+                                <Button Content="Set as Default"
+                                        Click="SetDefault_Click"
+                                        IsEnabled="{x:Bind ServicesListView.SelectedItem, Mode=OneWay, Converter={StaticResource ObjectToBoolConverter}}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Default Models Section -->
+                    <Border Style="{StaticResource SettingsSectionStyle}">
+                        <StackPanel Spacing="12">
+                            <TextBlock Text="Default Models" 
+                                       Style="{StaticResource SubtitleTextBlockStyle}" />
+                            <TextBlock Text="Set default models for AI function types" 
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       TextWrapping="Wrap"
+                                       Margin="0,0,0,8" />
+
+                            <TextBox Header="Default Text Model"
+                                     Text="{x:Bind Settings.DefaultTextModel, Mode=TwoWay}"
+                                     PlaceholderText="e.g., gpt-4, claude-3" />
+
+                            <TextBox Header="Default Image Model"
+                                     Text="{x:Bind Settings.DefaultImageModel, Mode=TwoWay}"
+                                     PlaceholderText="e.g., dall-e-3, stable-diffusion" />
+
+                            <TextBox Header="Default Video Model"
+                                     Text="{x:Bind Settings.DefaultVideoModel, Mode=TwoWay}"
+                                     PlaceholderText="e.g., gen-2, runway" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </PivotItem>
+
+            <!-- Performance Tab (Task 9) -->
+            <PivotItem Header="Performance">
+                <StackPanel Spacing="16">
+                    <Border Style="{StaticResource SettingsSectionStyle}">
+                        <StackPanel Spacing="16">
+                            <TextBlock Text="Multi-Threading" 
+                                       Style="{StaticResource SubtitleTextBlockStyle}" />
+                            
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="Maximum Parallel Threads"
+                                           FontWeight="SemiBold"/>
+                                <TextBlock Text="Controls how many cells can be evaluated simultaneously"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           TextWrapping="Wrap"
+                                           FontSize="12"/>
+                                
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    
+                                    <Slider x:Name="MaxThreadsSlider"
+                                            Grid.Column="0"
+                                            Minimum="1"
+                                            Maximum="32"
+                                            StepFrequency="1"
+                                            TickFrequency="4"
+                                            TickPlacement="BottomRight"
+                                            Value="{x:Bind Settings.MaxEvaluationThreads, Mode=TwoWay}"
+                                            ValueChanged="MaxThreadsSlider_ValueChanged"
+                                            Margin="0,0,12,0"/>
+                                    
+                                    <TextBlock x:Name="MaxThreadsLabel"
+                                               Grid.Column="1"
+                                               FontWeight="SemiBold"
+                                               FontSize="18"
+                                               VerticalAlignment="Center"
+                                               MinWidth="40"
+                                               TextAlignment="Center"/>
+                                </Grid>
+                                
+                                <TextBlock x:Name="MaxThreadsDescription"
+                                           FontSize="12"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                            </StackPanel>
+
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="Default Evaluation Timeout"
+                                           FontWeight="SemiBold"/>
+                                <TextBlock Text="Maximum time (in seconds) for a single cell evaluation"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           TextWrapping="Wrap"
+                                           FontSize="12"/>
+                                
+                                <NumberBox x:Name="TimeoutNumberBox"
+                                           Minimum="10"
+                                           Maximum="600"
+                                           SpinButtonPlacementMode="Inline"
+                                           SmallChange="10"
+                                           LargeChange="50"
+                                           Value="{x:Bind Settings.DefaultEvaluationTimeoutSeconds, Mode=TwoWay}"/>
+                                
+                                <TextBlock Text="Recommended: 100 seconds for AI functions, 30 seconds for built-in functions"
+                                           FontSize="11"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </PivotItem>
+
+            <!-- Appearance Tab (Task 10) -->
+            <PivotItem Header="Appearance">
+                <StackPanel Spacing="16">
+                    <Border Style="{StaticResource SettingsSectionStyle}">
+                        <StackPanel Spacing="16">
+                            <TextBlock Text="Cell Visual States" 
+                                       Style="{StaticResource SubtitleTextBlockStyle}" />
+                            <TextBlock Text="Choose a color theme for cell state indicators"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       TextWrapping="Wrap"
+                                       FontSize="12"
+                                       Margin="0,0,0,8"/>
+                            
+                            <ComboBox x:Name="ThemeComboBox"
+                                      Header="Visual Theme"
+                                      HorizontalAlignment="Stretch"
+                                      SelectionChanged="ThemeComboBox_SelectionChanged">
+                                <ComboBoxItem Content="Light" Tag="Light"/>
+                                <ComboBoxItem Content="Dark" Tag="Dark"/>
+                                <ComboBoxItem Content="High Contrast" Tag="HighContrast"/>
+                                <ComboBoxItem Content="Custom" Tag="Custom"/>
+                            </ComboBox>
+
+                            <!-- Theme Preview -->
+                            <Border BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="4"
+                                    Padding="12"
+                                    Background="{ThemeResource LayerFillColorDefaultBrush}">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="Preview" 
+                                               FontWeight="SemiBold"
+                                               FontSize="14"/>
+                                    
+                                    <Grid ColumnSpacing="8" RowSpacing="4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="60"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="✅" FontSize="16"/>
+                                        <TextBlock Grid.Row="0" Grid.Column="1" Text="Just Updated" VerticalAlignment="Center"/>
+                                        <Border Grid.Row="0" Grid.Column="2" x:Name="PreviewJustUpdated" Height="24" CornerRadius="4"/>
+
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="⏳" FontSize="16"/>
+                                        <TextBlock Grid.Row="1" Grid.Column="1" Text="Calculating" VerticalAlignment="Center"/>
+                                        <Border Grid.Row="1" Grid.Column="2" x:Name="PreviewCalculating" Height="24" CornerRadius="4"/>
+
+                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="🔵" FontSize="16"/>
+                                        <TextBlock Grid.Row="2" Grid.Column="1" Text="Stale (Needs Recalc)" VerticalAlignment="Center"/>
+                                        <Border Grid.Row="2" Grid.Column="2" x:Name="PreviewStale" Height="24" CornerRadius="4"/>
+
+                                        <TextBlock Grid.Row="3" Grid.Column="0" Text="🟠" FontSize="16"/>
+                                        <TextBlock Grid.Row="3" Grid.Column="1" Text="Manual Update" VerticalAlignment="Center"/>
+                                        <Border Grid.Row="3" Grid.Column="2" x:Name="PreviewManualUpdate" Height="24" CornerRadius="4"/>
+
+                                        <TextBlock Grid.Row="4" Grid.Column="0" Text="❌" FontSize="16"/>
+                                        <TextBlock Grid.Row="4" Grid.Column="1" Text="Error" VerticalAlignment="Center"/>
+                                        <Border Grid.Row="4" Grid.Column="2" x:Name="PreviewError" Height="24" CornerRadius="4"/>
+
+                                        <TextBlock Grid.Row="5" Grid.Column="0" Text="🔗" FontSize="16"/>
+                                        <TextBlock Grid.Row="5" Grid.Column="1" Text="In Dependency Chain" VerticalAlignment="Center"/>
+                                        <Border Grid.Row="5" Grid.Column="2" x:Name="PreviewDependency" Height="24" CornerRadius="4"/>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </PivotItem>
+
+            <!-- Workspace Tab -->
+            <PivotItem Header="Workspace">
+                <StackPanel Spacing="16">
+                    <Border Style="{StaticResource SettingsSectionStyle}">
+                        <StackPanel Spacing="12">
+                            <TextBlock Text="Workspace" 
+                                       Style="{StaticResource SubtitleTextBlockStyle}" />
+                            
+                            <ToggleSwitch Header="Auto-save workbooks"
+                                          IsOn="{x:Bind Settings.AutoSave, Mode=TwoWay}" />
+
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="Workspace Path" 
+                                           Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Grid.Column="0"
+                                             Text="{x:Bind Settings.WorkspacePath, Mode=TwoWay}"
+                                             PlaceholderText="C:\AiCalc\Workspaces" />
+                                    <Button Grid.Column="1" Content="Browse..." Click="BrowseWorkspace_Click" />
+                                </Grid>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </PivotItem>
+        </Pivot>
+    </ScrollViewer>
+</ContentDialog>
