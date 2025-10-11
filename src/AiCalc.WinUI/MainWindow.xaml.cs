@@ -430,10 +430,13 @@ public sealed partial class MainWindow : Page
     }
 
     /// <summary>
-    /// Handle F9 keyboard shortcut for Recalculate All (Task 10)
+    /// Handle keyboard shortcuts (F9, navigation, editing) - Phase 5 Task 14
     /// </summary>
     private async void MainWindow_KeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
     {
+        var ctrl = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(Windows.System.VirtualKey.Control).HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
+        var shift = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(Windows.System.VirtualKey.Shift).HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
+        
         // F9: Recalculate all (skip Manual cells per Task 10)
         if (e.Key == Windows.System.VirtualKey.F9)
         {
@@ -445,6 +448,204 @@ public sealed partial class MainWindow : Page
             {
                 BuildSpreadsheetGrid(ViewModel.SelectedSheet);
             }
+            return;
         }
+        
+        // F2: Edit mode
+        if (e.Key == Windows.System.VirtualKey.F2 && _selectedCell != null && _selectedButton != null)
+        {
+            StartDirectEdit(_selectedCell, _selectedButton);
+            e.Handled = true;
+            return;
+        }
+        
+        // Navigation requires a selected cell
+        if (_selectedCell == null || ViewModel.SelectedSheet == null)
+            return;
+        
+        // Ctrl+Home: Go to A1
+        if (ctrl && e.Key == Windows.System.VirtualKey.Home)
+        {
+            SelectCellAt(0, 0);
+            e.Handled = true;
+            return;
+        }
+        
+        // Ctrl+End: Go to last used cell
+        if (ctrl && e.Key == Windows.System.VirtualKey.End)
+        {
+            var sheet = ViewModel.SelectedSheet;
+            SelectCellAt(sheet.ColumnHeaders.Count - 1, sheet.Rows.Count - 1);
+            e.Handled = true;
+            return;
+        }
+        
+        // Ctrl+Arrow: Jump to data edge
+        if (ctrl && (e.Key == Windows.System.VirtualKey.Up || e.Key == Windows.System.VirtualKey.Down ||
+                     e.Key == Windows.System.VirtualKey.Left || e.Key == Windows.System.VirtualKey.Right))
+        {
+            int colDelta = e.Key == Windows.System.VirtualKey.Left ? -1 : e.Key == Windows.System.VirtualKey.Right ? 1 : 0;
+            int rowDelta = e.Key == Windows.System.VirtualKey.Up ? -1 : e.Key == Windows.System.VirtualKey.Down ? 1 : 0;
+            JumpToDataEdge(colDelta, rowDelta);
+            e.Handled = true;
+            return;
+        }
+        
+        // Arrow keys: Move selection
+        if (e.Key == Windows.System.VirtualKey.Up || e.Key == Windows.System.VirtualKey.Down ||
+            e.Key == Windows.System.VirtualKey.Left || e.Key == Windows.System.VirtualKey.Right)
+        {
+            int colDelta = e.Key == Windows.System.VirtualKey.Left ? -1 : e.Key == Windows.System.VirtualKey.Right ? 1 : 0;
+            int rowDelta = e.Key == Windows.System.VirtualKey.Up ? -1 : e.Key == Windows.System.VirtualKey.Down ? 1 : 0;
+            MoveSelection(colDelta, rowDelta);
+            e.Handled = true;
+            return;
+        }
+        
+        // Tab: Move right, Shift+Tab: Move left
+        if (e.Key == Windows.System.VirtualKey.Tab)
+        {
+            MoveSelection(shift ? -1 : 1, 0);
+            e.Handled = true;
+            return;
+        }
+        
+        // Enter: Save and move down, Shift+Enter: Save and move up
+        if (e.Key == Windows.System.VirtualKey.Enter)
+        {
+            CommitCellEdit();
+            MoveSelection(0, shift ? -1 : 1);
+            e.Handled = true;
+            return;
+        }
+        
+        // Page Up/Down: Scroll viewport (10 rows)
+        if (e.Key == Windows.System.VirtualKey.PageUp)
+        {
+            MoveSelection(0, -10);
+            e.Handled = true;
+            return;
+        }
+        
+        if (e.Key == Windows.System.VirtualKey.PageDown)
+        {
+            MoveSelection(0, 10);
+            e.Handled = true;
+            return;
+        }
+        
+        // Delete: Clear cell contents
+        if (e.Key == Windows.System.VirtualKey.Delete && _selectedCell != null)
+        {
+            _selectedCell.RawValue = string.Empty;
+            _selectedCell.Formula = string.Empty;
+            BuildSpreadsheetGrid(ViewModel.SelectedSheet);
+            e.Handled = true;
+            return;
+        }
+    }
+    
+    /// <summary>
+    /// Move selection by delta (Phase 5 Task 14)
+    /// </summary>
+    private void MoveSelection(int colDelta, int rowDelta)
+    {
+        if (_selectedCell == null || ViewModel.SelectedSheet == null) return;
+        
+        var currentAddr = _selectedCell.Address;
+        var newCol = currentAddr.Column + colDelta;
+        var newRow = currentAddr.Row + rowDelta;
+        
+        SelectCellAt(newCol, newRow);
+    }
+    
+    /// <summary>
+    /// Select cell at specific coordinates (Phase 5 Task 14)
+    /// </summary>
+    private void SelectCellAt(int colIndex, int rowIndex)
+    {
+        if (ViewModel.SelectedSheet == null) return;
+        
+        var sheet = ViewModel.SelectedSheet;
+        
+        // Clamp to valid range
+        colIndex = Math.Max(0, Math.Min(colIndex, sheet.ColumnHeaders.Count - 1));
+        rowIndex = Math.Max(0, Math.Min(rowIndex, sheet.Rows.Count - 1));
+        
+        var newCell = sheet.Rows[rowIndex].Cells[colIndex];
+        var newButton = GetButtonForCell(newCell);
+        
+        if (newButton != null)
+        {
+            SelectCell(newCell, newButton);
+        }
+    }
+    
+    /// <summary>
+    /// Jump to edge of data region (Phase 5 Task 14)
+    /// </summary>
+    private void JumpToDataEdge(int colDelta, int rowDelta)
+    {
+        if (_selectedCell == null || ViewModel.SelectedSheet == null) return;
+        
+        var sheet = ViewModel.SelectedSheet;
+        var currentCol = _selectedCell.Address.Column;
+        var currentRow = _selectedCell.Address.Row;
+        
+        // Determine if current cell is empty
+        bool currentIsEmpty = string.IsNullOrWhiteSpace(_selectedCell.RawValue);
+        
+        while (true)
+        {
+            var nextCol = currentCol + colDelta;
+            var nextRow = currentRow + rowDelta;
+            
+            // Check bounds
+            if (nextCol < 0 || nextRow < 0 || 
+                nextCol >= sheet.ColumnHeaders.Count || 
+                nextRow >= sheet.Rows.Count)
+            {
+                // Hit edge of sheet, stop at last valid cell
+                break;
+            }
+            
+            var nextCell = sheet.Rows[nextRow].Cells[nextCol];
+            bool nextIsEmpty = string.IsNullOrWhiteSpace(nextCell.RawValue);
+            
+            // Stop when transitioning from empty to non-empty or vice versa
+            if (currentIsEmpty != nextIsEmpty)
+            {
+                // If we started in empty space, land on first non-empty cell
+                // If we started in data, stop before entering empty space
+                if (currentIsEmpty)
+                {
+                    currentCol = nextCol;
+                    currentRow = nextRow;
+                }
+                break;
+            }
+            
+            currentCol = nextCol;
+            currentRow = nextRow;
+            currentIsEmpty = nextIsEmpty;
+        }
+        
+        SelectCellAt(currentCol, currentRow);
+    }
+    
+    /// <summary>
+    /// Get button control for a specific cell (Phase 5 Task 14)
+    /// </summary>
+    private Button? GetButtonForCell(CellViewModel cell)
+    {
+        // Find the button in SpreadsheetGrid by matching Tag
+        foreach (var child in SpreadsheetGrid.Children.OfType<Button>())
+        {
+            if (child.Tag is CellViewModel cellVm && cellVm == cell)
+            {
+                return child;
+            }
+        }
+        return null;
     }
 }
