@@ -3,6 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:AiCalc"
+    xmlns:models="using:AiCalc.Models"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
@@ -137,10 +138,43 @@
                             
                             <StackPanel Spacing="6">
                                 <TextBlock Text="Formula" Foreground="#CCFFFFFF" FontSize="13" FontWeight="SemiBold" />
-                                <TextBox x:Name="CellFormulaBox" 
-                                         PlaceholderText="=SUM(A1,A2)"
-                                         Height="40"
-                                         TextChanged="CellFormula_Changed" />
+                                <Grid>
+                                    <TextBox x:Name="CellFormulaBox" 
+                                             PlaceholderText="=SUM(A1,A2)"
+                                             Height="40"
+                                             TextChanged="CellFormula_Changed"
+                                             KeyDown="CellFormulaBox_KeyDown" />
+                                    
+                                    <!-- Function Autocomplete Popup -->
+                                    <Popup x:Name="FunctionAutocompletePopup"
+                                           IsLightDismissEnabled="True"
+                                           IsOpen="False">
+                                        <Border Background="{ThemeResource LayerFillColorDefaultBrush}"
+                                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="4"
+                                                Padding="4"
+                                                MaxHeight="200">
+                                            <ListView x:Name="FunctionAutocompleteList"
+                                                      SelectionMode="Single"
+                                                      ItemClick="FunctionAutocomplete_ItemClick"
+                                                      IsItemClickEnabled="True"
+                                                      MinWidth="200">
+                                                <ListView.ItemTemplate>
+                                                    <DataTemplate x:DataType="models:FunctionSuggestion">
+                                                        <StackPanel Padding="8,4">
+                                                            <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" />
+                                                            <TextBlock Text="{x:Bind Description}" 
+                                                                       FontSize="11"
+                                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                       TextWrapping="Wrap" />
+                                                        </StackPanel>
+                                                    </DataTemplate>
+                                                </ListView.ItemTemplate>
+                                            </ListView>
+                                        </Border>
+                                    </Popup>
+                                </Grid>
                             </StackPanel>
                             
                             <StackPanel Spacing="6">

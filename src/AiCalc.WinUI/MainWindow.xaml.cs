@@ -1,10 +1,12 @@
 using AiCalc.Models;
+using AiCalc.Services;
 using AiCalc.ViewModels;
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Windows.UI;
 
@@ -16,6 +18,7 @@ public sealed partial class MainWindow : Page
     private CellViewModel? _selectedCell;
     private Button? _selectedButton;
     private bool _isUpdatingCell = false;
+    private List<FunctionSuggestion> _allFunctionSuggestions = new();
 
     public MainWindow()
     {
@@ -32,7 +35,23 @@ public sealed partial class MainWindow : Page
         this.KeyDown += MainWindow_KeyDown;
         
         LoadFunctionsList();
+        InitializeFunctionSuggestions();
         RefreshSheetTabs();
+    }
+
+    private void InitializeFunctionSuggestions()
+    {
+        _allFunctionSuggestions.Clear();
+        foreach (var func in ViewModel.FunctionRegistry.Functions)
+        {
+            var paramNames = func.Parameters.Select(p => p.Name).ToList();
+            _allFunctionSuggestions.Add(new FunctionSuggestion
+            {
+                Name = func.Name,
+                Description = func.Description,
+                Signature = $"{func.Name}({string.Join(", ", paramNames)})"
+            });
+        }
     }
 
     private void LoadFunctionsList()
@@ -377,6 +396,111 @@ public sealed partial class MainWindow : Page
     {
         if (_isUpdatingCell || _selectedCell == null) return;
         _selectedCell.Formula = CellFormulaBox.Text;
+        
+        // Show intellisense if typing function name
+        ShowFormulaIntellisense();
+    }
+
+    private void ShowFormulaIntellisense()
+    {
+        var text = CellFormulaBox.Text;
+        
+        // Only show intellisense if text starts with = and has at least one character after
+        if (string.IsNullOrWhiteSpace(text) || !text.StartsWith("=") || text.Length < 2)
+        {
+            FunctionAutocompletePopup.IsOpen = false;
+            return;
+        }
+        
+        // Get the current function name being typed (after = and before ()
+        var formulaText = text.Substring(1); // Remove the =
+        var parenIndex = formulaText.IndexOf('(');
+        if (parenIndex >= 0)
+        {
+            // Already has opening paren, don't show suggestions
+            FunctionAutocompletePopup.IsOpen = false;
+            return;
+        }
+        
+        // Filter suggestions based on what's been typed
+        var searchText = formulaText.ToUpperInvariant();
+        var matchingSuggestions = _allFunctionSuggestions
+            .Where(f => f.Name.ToUpperInvariant().StartsWith(searchText))
+            .Take(10)
+            .ToList();
+        
+        if (matchingSuggestions.Any())
+        {
+            FunctionAutocompleteList.ItemsSource = matchingSuggestions;
+            FunctionAutocompleteList.SelectedIndex = 0;
+            
+            // Position popup below the textbox
+            var transform = CellFormulaBox.TransformToVisual(this);
+            var point = transform.TransformPoint(new Windows.Foundation.Point(0, CellFormulaBox.ActualHeight));
+            FunctionAutocompletePopup.HorizontalOffset = point.X;
+            FunctionAutocompletePopup.VerticalOffset = point.Y;
+            FunctionAutocompletePopup.IsOpen = true;
+        }
+        else
+        {
+            FunctionAutocompletePopup.IsOpen = false;
+        }
+    }
+
+    private void CellFormulaBox_KeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
+    {
+        if (!FunctionAutocompletePopup.IsOpen) return;
+        
+        if (e.Key == Windows.System.VirtualKey.Down)
+        {
+            // Move selection down
+            if (FunctionAutocompleteList.SelectedIndex < FunctionAutocompleteList.Items.Count - 1)
+            {
+                FunctionAutocompleteList.SelectedIndex++;
+            }
+            e.Handled = true;
+        }
+        else if (e.Key == Windows.System.VirtualKey.Up)
+        {
+            // Move selection up
+            if (FunctionAutocompleteList.SelectedIndex > 0)
+            {
+                FunctionAutocompleteList.SelectedIndex--;
+            }
+            e.Handled = true;
+        }
+        else if (e.Key == Windows.System.VirtualKey.Enter || e.Key == Windows.System.VirtualKey.Tab)
+        {
+            // Accept selected suggestion
+            if (FunctionAutocompleteList.SelectedItem is FunctionSuggestion suggestion)
+            {
+                InsertFunctionSuggestion(suggestion);
+            }
+            e.Handled = true;
+        }
+        else if (e.Key == Windows.System.VirtualKey.Escape)
+        {
+            // Close popup
+            FunctionAutocompletePopup.IsOpen = false;
+            e.Handled = true;
+        }
+    }
+
+    private void FunctionAutocomplete_ItemClick(object sender, ItemClickEventArgs e)
+    {
+        if (e.ClickedItem is FunctionSuggestion suggestion)
+        {
+            InsertFunctionSuggestion(suggestion);
+        }
+    }
+
+    private void InsertFunctionSuggestion(FunctionSuggestion suggestion)
+    {
+        // Replace the typed text with the full function name and opening paren
+        CellFormulaBox.Text = $"={suggestion.Name}(";
+        CellFormulaBox.SelectionStart = CellFormulaBox.Text.Length;
+        FunctionAutocompletePopup.IsOpen = false;
+        CellFormulaBox.Focus(FocusState.Programmatic);
     }
 
     private void CellNotes_Changed(object sender, TextChangedEventArgs e)
@@ -518,7 +642,19 @@ public sealed partial class MainWindow : Page
         if (e.Key == Windows.System.VirtualKey.Enter)
         {
             CommitCellEdit();
-            MoveSelection(0, shift ? -1 : 1);
+            var rowDelta = shift ? -1 : 1;
+            var newCell = MoveSelection(0, rowDelta);
+            
+            // Enter edit mode on the new cell if it's editable
+            if (newCell != null)
+            {
+                var newButton = GetButtonForCell(newCell);
+                if (newButton != null)
+                {
+                    StartDirectEdit(newCell, newButton);
+                }
+            }
+            
             e.Handled = true;
             return;
         }
@@ -552,23 +688,23 @@ public sealed partial class MainWindow : Page
     /// <summary>
     /// Move selection by delta (Phase 5 Task 14)
     /// </summary>
-    private void MoveSelection(int colDelta, int rowDelta)
+    private CellViewModel? MoveSelection(int colDelta, int rowDelta)
     {
-        if (_selectedCell == null || ViewModel.SelectedSheet == null) return;
+        if (_selectedCell == null || ViewModel.SelectedSheet == null) return null;
         
         var currentAddr = _selectedCell.Address;
         var newCol = currentAddr.Column + colDelta;
         var newRow = currentAddr.Row + rowDelta;
         
-        SelectCellAt(newCol, newRow);
+        return SelectCellAt(newCol, newRow);
     }
     
     /// <summary>
     /// Select cell at specific coordinates (Phase 5 Task 14)
     /// </summary>
-    private void SelectCellAt(int colIndex, int rowIndex)
+    private CellViewModel? SelectCellAt(int colIndex, int rowIndex)
     {
-        if (ViewModel.SelectedSheet == null) return;
+        if (ViewModel.SelectedSheet == null) return null;
         
         var sheet = ViewModel.SelectedSheet;
         
@@ -583,6 +719,8 @@ public sealed partial class MainWindow : Page
         {
             SelectCell(newCell, newButton);
         }
+        
+        return newCell;
     }
     
     /// <summary>
