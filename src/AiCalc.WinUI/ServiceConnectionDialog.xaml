@@ -43,14 +43,66 @@
                          Password="{x:Bind Connection.ApiKey, Mode=TwoWay}" />
 
             <TextBox x:Name="ModelTextBox"
-                     Header="Model"
+                     Header="Text Model *"
                      PlaceholderText="e.g., gpt-4, claude-3-opus"
                      Text="{x:Bind Connection.Model, Mode=TwoWay}" />
+
+            <TextBox x:Name="VisionModelTextBox"
+                     Header="Vision Model (Optional)"
+                     PlaceholderText="e.g., gpt-4-vision-preview, llava"
+                     Text="{x:Bind Connection.VisionModel, Mode=TwoWay}" />
+
+            <TextBox x:Name="ImageModelTextBox"
+                     Header="Image Generation Model (Optional)"
+                     PlaceholderText="e.g., dall-e-3"
+                     Text="{x:Bind Connection.ImageModel, Mode=TwoWay}" />
 
             <TextBox x:Name="DeploymentTextBox"
                      Header="Deployment Name (Azure only)"
                      PlaceholderText="e.g., gpt-4-deployment"
                      Text="{x:Bind Connection.Deployment, Mode=TwoWay}" />
+
+            <Expander Header="Performance Settings" IsExpanded="False">
+                <StackPanel Spacing="12" Padding="8">
+                    <NumberBox x:Name="TimeoutNumberBox"
+                              Header="Timeout (seconds)"
+                              Value="{x:Bind Connection.TimeoutSeconds, Mode=TwoWay}"
+                              Minimum="10"
+                              Maximum="300"
+                              SpinButtonPlacementMode="Inline" />
+
+                    <NumberBox x:Name="MaxRetriesNumberBox"
+                              Header="Max Retries"
+                              Value="{x:Bind Connection.MaxRetries, Mode=TwoWay}"
+                              Minimum="0"
+                              Maximum="10"
+                              SpinButtonPlacementMode="Inline" />
+
+                    <Slider x:Name="TemperatureSlider"
+                           Header="Temperature (Creativity)"
+                           Value="{x:Bind Connection.Temperature, Mode=TwoWay}"
+                           Minimum="0"
+                           Maximum="2"
+                           StepFrequency="0.1"
+                           TickFrequency="0.5"
+                           TickPlacement="BottomRight" />
+                    <TextBlock Text="{x:Bind TemperatureSlider.Value, Mode=OneWay}" 
+                              FontSize="12" 
+                              Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+            </Expander>
+
+            <Button x:Name="TestConnectionButton"
+                   Content="Test Connection"
+                   Click="TestConnection_Click"
+                   HorizontalAlignment="Stretch"
+                   Margin="0,8,0,0" />
+
+            <TextBlock x:Name="ConnectionStatusText"
+                      Visibility="Collapsed"
+                      TextWrapping="Wrap"
+                      FontSize="12"
+                      Margin="0,4,0,0" />
 
             <InfoBar Title="Connection Tips"
                      Severity="Informational"

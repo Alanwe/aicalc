@@ -323,8 +323,8 @@ Can we have a log mode in settings, default is no
 - Image viewer with metadata display
 
 **Questions**:
-- Should the dialog be modal or can user edit multiple cells?
-- Do you want a toolbar with formatting buttons for Markdown?
+- Should the dialog be modal or can user edit multiple cells? modal
+- Do you want a toolbar with formatting buttons for Markdown? yes
 
 ---
 
@@ -356,7 +356,9 @@ Can we have a log mode in settings, default is no
 
 **Questions**:
 - Which charting library do you prefer (OxyPlot, LiveCharts, etc.)?
+please use your judgement, which is the most attractive, professional and flexible
 - Should pivots support multiple aggregation functions?
+yes
 
 ---
 
@@ -375,8 +377,8 @@ Can we have a log mode in settings, default is no
 - Implement query builder for databases
 
 **Questions**:
-- Which data sources are priority? (SQL Server, Azure Blob, S3, etc.)
-- Should queries be editable in a visual query builder?
+- Which data sources are priority? (SQL Server, Azure Blob, S3, etc.) azure blob , azure sqldb
+- Should queries be editable in a visual query builder? yes
 
 ---
 

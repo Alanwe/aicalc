@@ -34,20 +34,23 @@ public class AzureOpenAIClient : IAIServiceClient
         _httpClient.DefaultRequestHeaders.Add("api-key", _apiKey);
     }
     
-    public async Task<bool> TestConnectionAsync(CancellationToken cancellationToken = default)
+    public async Task<AIResponse> TestConnectionAsync(CancellationToken cancellationToken = default)
     {
         try
         {
             var response = await CompleteTextAsync("Hello", new AICompletionOptions { MaxTokens = 5 }, cancellationToken);
             _connection.LastTested = DateTime.Now;
             _connection.LastTestError = response.Success ? null : response.Error;
-            return response.Success;
+            
+            return response.Success 
+                ? AIResponse.FromSuccess($"Connected to {_connection.Name}", response.TokensUsed, response.Duration)
+                : AIResponse.FromError(response.Error ?? "Connection failed", response.Duration);
         }
         catch (Exception ex)
         {
             _connection.LastTested = DateTime.Now;
             _connection.LastTestError = ex.Message;
-            return false;
+            return AIResponse.FromError(ex.Message, TimeSpan.Zero);
         }
     }
     
@@ -124,7 +127,7 @@ public class AzureOpenAIClient : IAIServiceClient
         }
     }
     
-    public async Task<AIResponse> GenerateCaptionAsync(string imagePath, int maxWords = 50, CancellationToken cancellationToken = default)
+    public async Task<AIResponse> GenerateCaptionAsync(string imagePath, string prompt = "Describe this image in detail.", CancellationToken cancellationToken = default)
     {
         var sw = Stopwatch.StartNew();
         
@@ -144,12 +147,12 @@ public class AzureOpenAIClient : IAIServiceClient
                         role = "user",
                         content = new object[]
                         {
-                            new { type = "text", text = $"Describe this image in {maxWords} words or less." },
+                            new { type = "text", text = prompt },
                             new { type = "image_url", image_url = new { url = $"data:{mimeType};base64,{base64Image}" } }
                         }
                     }
                 },
-                max_tokens = maxWords * 2
+                max_tokens = 500
             };
             
             var json = JsonSerializer.Serialize(request);

@@ -502,19 +502,24 @@ public class FunctionRegistry
 
     private void RegisterImageFunctions()
     {
-        // IMAGE_TO_CAPTION
+        // IMAGE_INFO - Get image dimensions and metadata
         Register(new FunctionDescriptor(
-            "IMAGE_TO_CAPTION",
-            "Generates a caption for an image using AI.",
+            "IMAGE_INFO",
+            "Returns information about an image (dimensions, format, size).",
             async ctx =>
             {
                 await Task.CompletedTask;
                 var imagePath = ctx.Arguments.FirstOrDefault()?.DisplayValue ?? string.Empty;
-                var caption = $"[AI Caption] Description of {System.IO.Path.GetFileName(imagePath)}";
-                return new FunctionExecutionResult(new CellValue(CellObjectType.Text, caption, caption));
+                if (string.IsNullOrWhiteSpace(imagePath) || !System.IO.File.Exists(imagePath))
+                {
+                    return new FunctionExecutionResult(new CellValue(CellObjectType.Error, "Image not found", "Error: Image not found"));
+                }
+                var info = new System.IO.FileInfo(imagePath);
+                var result = $"{info.Name} - {info.Length:N0} bytes";
+                return new FunctionExecutionResult(new CellValue(CellObjectType.Text, result, result));
             },
-            FunctionCategory.AI,
-            new FunctionParameter("image", "Image to caption.", CellObjectType.Image)));
+            FunctionCategory.Image,
+            new FunctionParameter("image", "Image file.", CellObjectType.Image)));
     }
 
     private void RegisterPdfFunctions()
@@ -547,31 +552,131 @@ public class FunctionRegistry
 
     private void RegisterAIFunctions()
     {
-        // TEXT_TO_IMAGE
+        // IMAGE_TO_CAPTION - Generate image captions using AI vision models
+        Register(new FunctionDescriptor(
+            "IMAGE_TO_CAPTION",
+            "Generates a descriptive caption for an image using AI vision models (GPT-4-Vision, LLaVA).",
+            async ctx =>
+            {
+                // Implementation will be handled by FunctionRunner with AIServiceRegistry
+                await Task.CompletedTask;
+                var imagePath = ctx.Arguments.FirstOrDefault()?.DisplayValue ?? string.Empty;
+                return new FunctionExecutionResult(new CellValue(CellObjectType.Text, "[AI Processing Required]", $"Processing image: {System.IO.Path.GetFileName(imagePath)}"));
+            },
+            FunctionCategory.AI,
+            new FunctionParameter("image", "Image to caption.", CellObjectType.Image)));
+
+        // TEXT_TO_IMAGE - Generate images from text prompts
         Register(new FunctionDescriptor(
             "TEXT_TO_IMAGE",
-            "Generates an image from a text prompt using AI.",
+            "Generates an image from a text prompt using AI (DALL-E 3).",
             async ctx =>
             {
                 await Task.CompletedTask;
                 var prompt = ctx.Arguments.FirstOrDefault()?.DisplayValue ?? string.Empty;
-                var metadata = $"image://generated/{Guid.NewGuid().ToString("N")}.png";
-                return new FunctionExecutionResult(new CellValue(CellObjectType.Image, metadata, $"Image from '{prompt}'"));
+                return new FunctionExecutionResult(new CellValue(CellObjectType.Image, "[AI Processing Required]", $"Generating image from: {prompt}"));
             },
             FunctionCategory.AI,
-            new FunctionParameter("prompt", "Prompt text", CellObjectType.Text)));
+            new FunctionParameter("prompt", "Text description of the image to generate.", CellObjectType.Text)));
 
-        // IMAGE_TO_TEXT
+        // TRANSLATE - Translate text between languages
         Register(new FunctionDescriptor(
-            "IMAGE_TO_TEXT",
-            "Extracts or describes text from an image using OCR/AI.",
+            "TRANSLATE",
+            "Translates text from one language to another using AI.",
             async ctx =>
             {
                 await Task.CompletedTask;
-                var description = $"Caption for {ctx.Arguments.FirstOrDefault()?.DisplayValue}";
-                return new FunctionExecutionResult(new CellValue(CellObjectType.Text, description, description));
+                var text = ctx.Arguments.Count > 0 ? ctx.Arguments[0].DisplayValue ?? string.Empty : string.Empty;
+                var targetLang = ctx.Arguments.Count > 1 ? ctx.Arguments[1].DisplayValue ?? "English" : "English";
+                return new FunctionExecutionResult(new CellValue(CellObjectType.Text, "[AI Processing Required]", $"Translating to {targetLang}"));
             },
             FunctionCategory.AI,
-            new FunctionParameter("image", "Image cell", CellObjectType.Image)));
+            new FunctionParameter("text", "Text to translate.", CellObjectType.Text),
+            new FunctionParameter("target_language", "Target language (e.g., Spanish, French, Japanese).", CellObjectType.Text)));
+
+        // SUMMARIZE - Summarize long text
+        Register(new FunctionDescriptor(
+            "SUMMARIZE",
+            "Creates a concise summary of a longer text using AI.",
+            async ctx =>
+            {
+                await Task.CompletedTask;
+                var text = ctx.Arguments.FirstOrDefault()?.DisplayValue ?? string.Empty;
+                var maxLength = ctx.Arguments.Count > 1 && int.TryParse(ctx.Arguments[1].DisplayValue, out var len) ? len : 100;
+                return new FunctionExecutionResult(new CellValue(CellObjectType.Text, "[AI Processing Required]", $"Summarizing text ({text.Length} chars -> ~{maxLength} words)"));
+            },
+            FunctionCategory.AI,
+            new FunctionParameter("text", "Text to summarize.", CellObjectType.Text),
+            new FunctionParameter("max_words", "Maximum summary length in words.", CellObjectType.Number, isOptional: true)));
+
+        // CHAT - Interactive conversation with AI
+        Register(new FunctionDescriptor(
+            "CHAT",
+            "Sends a message to an AI assistant and returns the response.",
+            async ctx =>
+            {
+                await Task.CompletedTask;
+                var message = ctx.Arguments.FirstOrDefault()?.DisplayValue ?? string.Empty;
+                return new FunctionExecutionResult(new CellValue(CellObjectType.Text, "[AI Processing Required]", $"Asking AI: {message}"));
+            },
+            FunctionCategory.AI,
+            new FunctionParameter("message", "Your message to the AI.", CellObjectType.Text),
+            new FunctionParameter("system_prompt", "Optional system instructions.", CellObjectType.Text, isOptional: true)));
+
+        // CODE_REVIEW - Review code and provide suggestions
+        Register(new FunctionDescriptor(
+            "CODE_REVIEW",
+            "Reviews code and provides suggestions for improvements, bugs, and best practices.",
+            async ctx =>
+            {
+                await Task.CompletedTask;
+                var code = ctx.Arguments.FirstOrDefault()?.DisplayValue ?? string.Empty;
+                return new FunctionExecutionResult(new CellValue(CellObjectType.Text, "[AI Processing Required]", "Reviewing code..."));
+            },
+            FunctionCategory.AI,
+            new FunctionParameter("code", "Code to review.", CellObjectType.CodePython, false, CellObjectType.CodeCSharp, CellObjectType.CodeJavaScript, CellObjectType.CodeTypeScript, CellObjectType.CodeHtml, CellObjectType.CodeCss)));
+
+        // JSON_QUERY - Query JSON data using natural language
+        Register(new FunctionDescriptor(
+            "JSON_QUERY",
+            "Queries JSON data using natural language and returns the result.",
+            async ctx =>
+            {
+                await Task.CompletedTask;
+                var json = ctx.Arguments.Count > 0 ? ctx.Arguments[0].DisplayValue ?? string.Empty : string.Empty;
+                var query = ctx.Arguments.Count > 1 ? ctx.Arguments[1].DisplayValue ?? string.Empty : string.Empty;
+                return new FunctionExecutionResult(new CellValue(CellObjectType.Json, "[AI Processing Required]", $"Query: {query}"));
+            },
+            FunctionCategory.AI,
+            new FunctionParameter("json", "JSON data to query.", CellObjectType.Json),
+            new FunctionParameter("query", "Natural language query.", CellObjectType.Text)));
+
+        // AI_EXTRACT - Extract specific information from text
+        Register(new FunctionDescriptor(
+            "AI_EXTRACT",
+            "Extracts specific information from text using AI (e.g., emails, dates, names).",
+            async ctx =>
+            {
+                await Task.CompletedTask;
+                var text = ctx.Arguments.Count > 0 ? ctx.Arguments[0].DisplayValue ?? string.Empty : string.Empty;
+                var extractType = ctx.Arguments.Count > 1 ? ctx.Arguments[1].DisplayValue ?? "entities" : "entities";
+                return new FunctionExecutionResult(new CellValue(CellObjectType.Text, "[AI Processing Required]", $"Extracting {extractType}"));
+            },
+            FunctionCategory.AI,
+            new FunctionParameter("text", "Text to analyze.", CellObjectType.Text),
+            new FunctionParameter("extract_type", "What to extract (emails, dates, names, entities).", CellObjectType.Text)));
+
+        // SENTIMENT - Analyze sentiment of text
+        Register(new FunctionDescriptor(
+            "SENTIMENT",
+            "Analyzes the sentiment (positive/negative/neutral) of text using AI.",
+            async ctx =>
+            {
+                await Task.CompletedTask;
+                var text = ctx.Arguments.FirstOrDefault()?.DisplayValue ?? string.Empty;
+                return new FunctionExecutionResult(new CellValue(CellObjectType.Text, "[AI Processing Required]", "Analyzing sentiment..."));
+            },
+            FunctionCategory.AI,
+            new FunctionParameter("text", "Text to analyze.", CellObjectType.Text)));
     }
 }

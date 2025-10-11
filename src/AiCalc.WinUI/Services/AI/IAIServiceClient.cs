@@ -13,7 +13,7 @@ public interface IAIServiceClient
     /// <summary>
     /// Test if the connection is working
     /// </summary>
-    Task<bool> TestConnectionAsync(CancellationToken cancellationToken = default);
+    Task<AIResponse> TestConnectionAsync(CancellationToken cancellationToken = default);
     
     /// <summary>
     /// Complete text with AI
@@ -23,7 +23,7 @@ public interface IAIServiceClient
     /// <summary>
     /// Generate a caption for an image
     /// </summary>
-    Task<AIResponse> GenerateCaptionAsync(string imagePath, int maxWords = 50, CancellationToken cancellationToken = default);
+    Task<AIResponse> GenerateCaptionAsync(string imagePath, string prompt = "Describe this image in detail.", CancellationToken cancellationToken = default);
     
     /// <summary>
     /// Generate an image from text prompt

@@ -1,7 +1,10 @@
 using AiCalc.Models;
+using AiCalc.Services.AI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using System;
+using System.Threading.Tasks;
 
 namespace AiCalc;
 
@@ -38,7 +41,12 @@ public sealed partial class ServiceConnectionDialog : ContentDialog
                 Provider = "Azure OpenAI",
                 Endpoint = "",
                 ApiKey = "",
-                Model = "",
+                Model = "gpt-4",
+                VisionModel = "gpt-4-vision-preview",
+                ImageModel = "dall-e-3",
+                TimeoutSeconds = 100,
+                MaxRetries = 3,
+                Temperature = 0.7,
                 IsDefault = false
             };
         }
@@ -124,6 +132,7 @@ public sealed partial class ServiceConnectionDialog : ContentDialog
         Connection.Provider = "Local (Ollama)";
         Connection.Endpoint = "http://localhost:11434";
         Connection.Model = "llama2";
+        Connection.VisionModel = "llava";
         Connection.Deployment = null;
         Connection.ApiKey = "";
         
@@ -131,7 +140,66 @@ public sealed partial class ServiceConnectionDialog : ContentDialog
         ProviderComboBox.SelectedItem = "Local (Ollama)";
         EndpointTextBox.Text = Connection.Endpoint;
         ModelTextBox.Text = Connection.Model;
+        VisionModelTextBox.Text = Connection.VisionModel;
         DeploymentTextBox.Text = "";
         ApiKeyPasswordBox.Password = "";
+    }
+
+    private async void TestConnection_Click(object sender, RoutedEventArgs e)
+    {
+        TestConnectionButton.IsEnabled = false;
+        ConnectionStatusText.Visibility = Visibility.Visible;
+        ConnectionStatusText.Foreground = new SolidColorBrush(Microsoft.UI.Colors.Gray);
+        ConnectionStatusText.Text = "Testing connection...";
+
+        try
+        {
+            // Validate required fields first
+            if (string.IsNullOrWhiteSpace(Connection.Endpoint))
+            {
+                ConnectionStatusText.Foreground = new SolidColorBrush(Microsoft.UI.Colors.Red);
+                ConnectionStatusText.Text = "❌ Error: Endpoint is required";
+                return;
+            }
+
+            // Create temporary client for testing
+            IAIServiceClient client = Connection.Provider switch
+            {
+                "Azure OpenAI" => new AzureOpenAIClient(Connection),
+                "Local (Ollama)" => new OllamaClient(Connection),
+                _ => throw new NotSupportedException($"Provider '{Connection.Provider}' is not yet supported")
+            };
+
+            var result = await client.TestConnectionAsync();
+            
+            if (result.Success)
+            {
+                ConnectionStatusText.Foreground = new SolidColorBrush(Microsoft.UI.Colors.Green);
+                ConnectionStatusText.Text = $"✅ Connection successful! {result.Result}";
+                Connection.IsActive = true;
+                Connection.LastTested = DateTime.Now;
+                Connection.LastTestError = null;
+            }
+            else
+            {
+                ConnectionStatusText.Foreground = new SolidColorBrush(Microsoft.UI.Colors.Red);
+                ConnectionStatusText.Text = $"❌ Connection failed: {result.Error}";
+                Connection.IsActive = false;
+                Connection.LastTested = DateTime.Now;
+                Connection.LastTestError = result.Error;
+            }
+        }
+        catch (Exception ex)
+        {
+            ConnectionStatusText.Foreground = new SolidColorBrush(Microsoft.UI.Colors.Red);
+            ConnectionStatusText.Text = $"❌ Error: {ex.Message}";
+            Connection.IsActive = false;
+            Connection.LastTested = DateTime.Now;
+            Connection.LastTestError = ex.Message;
+        }
+        finally
+        {
+            TestConnectionButton.IsEnabled = true;
+        }
     }
 }

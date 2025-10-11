@@ -30,21 +30,27 @@ public class OllamaClient : IAIServiceClient
         };
     }
     
-    public async Task<bool> TestConnectionAsync(CancellationToken cancellationToken = default)
+    public async Task<AIResponse> TestConnectionAsync(CancellationToken cancellationToken = default)
     {
+        var sw = Stopwatch.StartNew();
         try
         {
             // Test by trying to list models
             var response = await _httpClient.GetAsync("/api/tags", cancellationToken);
             _connection.LastTested = DateTime.Now;
             _connection.LastTestError = response.IsSuccessStatusCode ? null : $"Status: {response.StatusCode}";
-            return response.IsSuccessStatusCode;
+            
+            sw.Stop();
+            return response.IsSuccessStatusCode
+                ? AIResponse.FromSuccess($"Connected to Ollama at {_connection.Endpoint}", 0, sw.Elapsed)
+                : AIResponse.FromError($"Failed with status: {response.StatusCode}", sw.Elapsed);
         }
         catch (Exception ex)
         {
             _connection.LastTested = DateTime.Now;
             _connection.LastTestError = ex.Message;
-            return false;
+            sw.Stop();
+            return AIResponse.FromError(ex.Message, sw.Elapsed);
         }
     }
     
@@ -97,7 +103,7 @@ public class OllamaClient : IAIServiceClient
         }
     }
     
-    public async Task<AIResponse> GenerateCaptionAsync(string imagePath, int maxWords = 50, CancellationToken cancellationToken = default)
+    public async Task<AIResponse> GenerateCaptionAsync(string imagePath, string prompt = "Describe this image in detail.", CancellationToken cancellationToken = default)
     {
         var sw = Stopwatch.StartNew();
         
@@ -110,7 +116,7 @@ public class OllamaClient : IAIServiceClient
             var request = new
             {
                 model = _connection.VisionModel ?? "llava",
-                prompt = $"Describe this image in {maxWords} words or less.",
+                prompt = prompt,
                 images = new[] { base64Image },
                 stream = false
             };

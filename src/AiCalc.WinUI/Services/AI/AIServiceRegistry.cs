@@ -97,13 +97,13 @@ public class AIServiceRegistry
     /// <summary>
     /// Test a connection
     /// </summary>
-    public async Task<bool> TestConnectionAsync(Guid connectionId)
+    public async Task<AIResponse> TestConnectionAsync(Guid connectionId)
     {
         var connection = GetConnection(connectionId);
         var client = GetClient(connectionId);
         
         if (connection == null || client == null)
-            return false;
+            return AIResponse.FromError("Connection not found", TimeSpan.Zero);
         
         try
         {
@@ -113,7 +113,7 @@ public class AIServiceRegistry
         {
             connection.LastTestError = ex.Message;
             connection.LastTested = DateTime.Now;
-            return false;
+            return AIResponse.FromError(ex.Message, TimeSpan.Zero);
         }
     }
     

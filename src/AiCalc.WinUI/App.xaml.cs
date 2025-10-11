@@ -1,6 +1,8 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
 using AiCalc.Models;
+using AiCalc.Services.AI;
+using System;
 using Windows.UI;
 
 namespace AiCalc;
@@ -10,35 +12,65 @@ public partial class App : Application
     private Window? _window;
     
     public static Window? MainWindow { get; private set; }
+    
+    /// <summary>
+    /// Global AI Service Registry for managing AI connections
+    /// </summary>
+    public static AIServiceRegistry AIServices { get; private set; } = new AIServiceRegistry();
 
     public App()
     {
-        InitializeComponent();
-        this.UnhandledException += OnUnhandledException;
-        
-        // Load default theme (Light) on startup - Task 10
-        ApplyCellStateTheme(CellVisualTheme.Light);
+        try
+        {
+            InitializeComponent();
+            this.UnhandledException += OnUnhandledException;
+            
+            // NOTE: Theme is applied in OnLaunched after window is created
+            // Calling ApplyCellStateTheme here causes crash because Resources aren't ready yet
+        }
+        catch (Exception ex)
+        {
+            System.IO.File.WriteAllText(@"C:\Projects\aicalc\app_crash.log", 
+                $"App Constructor Exception:\n{ex.Message}\n\n{ex.StackTrace}");
+            throw;
+        }
     }
 
     private void OnUnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e)
     {
-        System.Diagnostics.Debug.WriteLine($"Unhandled exception: {e.Exception}" );
+        System.Diagnostics.Debug.WriteLine($"Unhandled exception: {e.Exception}");
+        System.IO.File.WriteAllText(@"C:\Projects\aicalc\app_unhandled.log", 
+            $"Unhandled Exception:\n{e.Exception.Message}\n\n{e.Exception.StackTrace}");
+        e.Handled = true;
     }
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
-        base.OnLaunched(args);
-        if (_window is null)
+        try
         {
-            _window = new Window
+            base.OnLaunched(args);
+            
+            // Apply default theme now that resources are initialized
+            ApplyCellStateTheme(CellVisualTheme.Light);
+            
+            if (_window is null)
             {
-                Title = "AiCalc Studio"
-            };
-            _window.Content = new MainWindow();
-            MainWindow = _window;
-        }
+                _window = new Window
+                {
+                    Title = "AiCalc Studio"
+                };
+                _window.Content = new MainWindow();
+                MainWindow = _window;
+            }
 
-        _window.Activate();
+            _window.Activate();
+        }
+        catch (Exception ex)
+        {
+            System.IO.File.WriteAllText(@"C:\Projects\aicalc\onlaunched_crash.log", 
+                $"OnLaunched Exception:\n{ex.Message}\n\n{ex.StackTrace}\n\nInner: {ex.InnerException?.Message}\n{ex.InnerException?.StackTrace}");
+            throw;
+        }
     }
 
     /// <summary>
