@@ -311,6 +311,13 @@ public class DependencyGraph
 
         // Group nodes by level
         var batches = new List<List<CellAddress>>();
+        
+        // Handle empty graph
+        if (_nodes.Count == 0)
+        {
+            return batches;
+        }
+        
         var maxLevel = _nodes.Values.Max(n => n.Level);
         
         for (int level = 0; level <= maxLevel; level++)

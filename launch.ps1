@@ -6,12 +6,19 @@ param(
     [string]$Platform = "x64"
 )
 
-$exePath = "src\AiCalc.WinUI\bin\$Platform\$Configuration\net8.0-windows10.0.19041.0\win-$Platform\publish\AiCalc.WinUI.exe"
+# Try the direct build output first (most common after dotnet build)
+$exePath = "src\AiCalc.WinUI\bin\$Platform\$Configuration\net8.0-windows10.0.19041.0\AiCalc.WinUI.exe"
+
+# Fallback to published version if available
+if (-not (Test-Path $exePath)) {
+    $exePath = "src\AiCalc.WinUI\bin\$Platform\$Configuration\net8.0-windows10.0.19041.0\win-$Platform\publish\AiCalc.WinUI.exe"
+}
 
 if (Test-Path $exePath) {
     Write-Host "Launching AiCalc Studio..." -ForegroundColor Green
+    Write-Host "Path: $exePath" -ForegroundColor Gray
     Start-Process $exePath
 } else {
-    Write-Host "Application not built yet. Run .\run.ps1 first to build and publish." -ForegroundColor Yellow
-    Write-Host "Looking for: $exePath" -ForegroundColor Gray
+    Write-Host "Application not built yet. Run .\run.ps1 first to build." -ForegroundColor Yellow
+    Write-Host "Expected: src\AiCalc.WinUI\bin\$Platform\$Configuration\net8.0-windows10.0.19041.0\AiCalc.WinUI.exe" -ForegroundColor Gray
 }
