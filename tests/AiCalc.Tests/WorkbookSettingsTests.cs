@@ -14,7 +14,7 @@ public class WorkbookSettingsTests
         // Assert
         Assert.NotNull(settings.Connections);
         Assert.Empty(settings.Connections);
-        Assert.Equal(4, settings.MaxEvaluationThreads); // Default to CPU count (typically 4 in tests)
+        Assert.True(settings.MaxEvaluationThreads > 0); // Default to CPU count
         Assert.Equal(100, settings.DefaultEvaluationTimeoutSeconds);
     }
 
