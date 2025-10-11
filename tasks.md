@@ -413,7 +413,8 @@ yes
 
 **Questions**:
 - Should the Python SDK use IPC, REST API, or COM interop?
-- Do you want Jupyter Notebook integration?
+Whatever you think is the most robust and flexible. We need it to be secure. Id rather not run seperate servers if possible. A comnination is also acceptable
+- Do you want Jupyter Notebook integration? Not at this stage, if we have an SDK we can connect from Python within Jupyter I think.
 
 ---
 
@@ -430,8 +431,8 @@ yes
 - Add "Open in VS Code" button for Python script cells
 
 **Questions**:
-- Should Python functions run in-process or in separate process?
-- Do you want debugging support (attach debugger)?
+- Should Python functions run in-process or in separate process? I think a seperate process is more secure and reliable, however if we can do in-process that would be good. I dont want a seperate window appearing
+- Do you want debugging support (attach debugger)? Yes, but if complicated we can work without
 
 ---
 
@@ -447,8 +448,8 @@ yes
 - Cache results for expensive operations
 
 **Questions**:
-- Which cloud providers are priority?
-- Should there be a script marketplace/sharing feature?
+- Which cloud providers are priority? Azure
+- Should there be a script marketplace/sharing feature? Yes, for now I was thinking just pointing to a Github repo. We could do a proper marketplace in the future so future proofing would be good.
 
 ---
 
@@ -489,13 +490,13 @@ yes
 - Add binary format option for large workbooks
 - Implement incremental save (only changed cells)
 - Add autosave feature with recovery
-- Support export to Excel (.xlsx)
+- Support export to Excel (.xlsx), Not sure how easy this is as AICalc is a superset, this is optional for noow
 - Support import from CSV, Excel
 - Add version control (track changes, rollback)
 
 **Questions**:
-- Should binary format be default or opt-in?
-- Do you want cloud sync support (OneDrive, Dropbox)?
+- Should binary format be default or opt-in? 
+- Do you want cloud sync support (OneDrive, Dropbox)? Yes if easy to implement. My assumption is the underlying file access would do this
 
 ---
 
@@ -555,8 +556,8 @@ yes
 - One-click install from marketplace
 
 **Questions**:
-- Should plugins be .NET assemblies or Python scripts or both?
-- Do you want a plugin signing/certification system?
+- Should plugins be .NET assemblies or Python scripts or both? Both, primary for now is Python.
+- Do you want a plugin signing/certification system? That would be great
 
 ---
 
@@ -564,6 +565,7 @@ yes
 **Goal**: Implement tiered service model
 **Dependencies**: Task 11, Task 12
 **Details**:
+- Build scaffolding for future, we will only implement standard for now.
 - Create service tiers: Standard, Plus, Pro
 - Implement usage tracking and quotas
 - Token limits per tier
@@ -574,8 +576,9 @@ yes
 - Usage dashboard and billing integration
 
 **Questions**:
-- Is this for commercial use or personal project?
-- Should there be a free tier with limitations?
+- Is this for commercial use or personal project? Both
+- Should there be a free tier with limitations? Yes this is standard.
+
 
 ---
 

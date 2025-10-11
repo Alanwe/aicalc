@@ -82,4 +82,95 @@ public class SheetViewModel
 
         return row;
     }
+    
+    // ==================== Row/Column Operations (Phase 5 Task 16) ====================
+    
+    public void InsertRow(int index)
+    {
+        if (index < 0 || index > Rows.Count) return;
+        
+        var newRow = CreateRow(index, ColumnCount);
+        Rows.Insert(index, newRow);
+        
+        // Update row indices for all rows after the inserted row
+        for (int r = index + 1; r < Rows.Count; r++)
+        {
+            Rows[r] = RecreateRowWithNewIndex(Rows[r], r);
+        }
+    }
+    
+    public void DeleteRow(int index)
+    {
+        if (index < 0 || index >= Rows.Count || Rows.Count <= 1) return;
+        
+        Rows.RemoveAt(index);
+        
+        // Update row indices for all rows after the deleted row
+        for (int r = index; r < Rows.Count; r++)
+        {
+            Rows[r] = RecreateRowWithNewIndex(Rows[r], r);
+        }
+    }
+    
+    public void InsertColumn(int index)
+    {
+        if (index < 0 || index > ColumnCount) return;
+        
+        foreach (var row in Rows)
+        {
+            var newCell = new CellViewModel(_workbook, this, row.Index, index);
+            row.Cells.Insert(index, newCell);
+            
+            // Update column indices for all cells after the inserted column
+            for (int c = index + 1; c < row.Cells.Count; c++)
+            {
+                row.Cells[c] = RecreateCellWithNewIndex(row.Cells[c], row.Index, c);
+            }
+        }
+    }
+    
+    public void DeleteColumn(int index)
+    {
+        if (index < 0 || index >= ColumnCount || ColumnCount <= 1) return;
+        
+        foreach (var row in Rows)
+        {
+            row.Cells.RemoveAt(index);
+            
+            // Update column indices for all cells after the deleted column
+            for (int c = index; c < row.Cells.Count; c++)
+            {
+                row.Cells[c] = RecreateCellWithNewIndex(row.Cells[c], row.Index, c);
+            }
+        }
+    }
+    
+    private RowViewModel RecreateRowWithNewIndex(RowViewModel oldRow, int newIndex)
+    {
+        var newRow = new RowViewModel(newIndex);
+        for (int c = 0; c < oldRow.Cells.Count; c++)
+        {
+            var oldCell = oldRow.Cells[c];
+            var newCell = new CellViewModel(_workbook, this, newIndex, c)
+            {
+                RawValue = oldCell.RawValue,
+                Formula = oldCell.Formula,
+                Notes = oldCell.Notes,
+                AutomationMode = oldCell.AutomationMode
+            };
+            newRow.Cells.Add(newCell);
+        }
+        return newRow;
+    }
+    
+    private CellViewModel RecreateCellWithNewIndex(CellViewModel oldCell, int newRow, int newCol)
+    {
+        return new CellViewModel(_workbook, this, newRow, newCol)
+        {
+            RawValue = oldCell.RawValue,
+            Formula = oldCell.Formula,
+            Notes = oldCell.Notes,
+            AutomationMode = oldCell.AutomationMode
+        };
+    }
 }

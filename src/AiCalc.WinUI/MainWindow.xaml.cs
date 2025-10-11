@@ -207,6 +207,10 @@ public sealed partial class MainWindow : Page
         button.Click += (s, e) => SelectCell(cellVm, button);
         button.DoubleTapped += (s, e) => StartDirectEdit(cellVm, button);
         
+        // Attach context menu (Phase 5 Task 16)
+        button.ContextFlyout = Resources["CellContextMenu"] as MenuFlyout;
+        button.RightTapped += (s, e) => SelectCell(cellVm, button);
+        
         return button;
     }
 
@@ -647,5 +651,180 @@ public sealed partial class MainWindow : Page
             }
         }
         return null;
+    }
+    
+    // ==================== Context Menu Handlers (Phase 5 Task 16) ====================
+    
+    private void Cut_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedCell == null) return;
+        
+        // Copy to clipboard
+        var dataPackage = new Windows.ApplicationModel.DataTransfer.DataPackage();
+        dataPackage.SetText(_selectedCell.RawValue);
+        Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(dataPackage);
+        
+        // Clear cell
+        _selectedCell.RawValue = string.Empty;
+        
+        // Refresh grid
+        if (ViewModel.SelectedSheet != null)
+        {
+            BuildSpreadsheetGrid(ViewModel.SelectedSheet);
+        }
+        
+        ViewModel.StatusMessage = $"Cut cell {_selectedCell.DisplayLabel}";
+    }
+    
+    private void Copy_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedCell == null) return;
+        
+        var dataPackage = new Windows.ApplicationModel.DataTransfer.DataPackage();
+        dataPackage.SetText(_selectedCell.RawValue);
+        Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(dataPackage);
+        
+        ViewModel.StatusMessage = $"Copied cell {_selectedCell.DisplayLabel}";
+    }
+    
+    private async void Paste_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedCell == null) return;
+        
+        try
+        {
+            var dataPackageView = Windows.ApplicationModel.DataTransfer.Clipboard.GetContent();
+            if (dataPackageView.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.Text))
+            {
+                var text = await dataPackageView.GetTextAsync();
+                _selectedCell.RawValue = text;
+                
+                // Refresh grid
+                if (ViewModel.SelectedSheet != null)
+                {
+                    BuildSpreadsheetGrid(ViewModel.SelectedSheet);
+                }
+                
+                ViewModel.StatusMessage = $"Pasted into cell {_selectedCell.DisplayLabel}";
+            }
+        }
+        catch (Exception ex)
+        {
+            ViewModel.StatusMessage = $"Paste failed: {ex.Message}";
+        }
+    }
+    
+    private void ClearContents_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedCell == null) return;
+        
+        _selectedCell.RawValue = string.Empty;
+        _selectedCell.Formula = string.Empty;
+        _selectedCell.Notes = string.Empty;
+        
+        // Refresh grid and inspector
+        if (ViewModel.SelectedSheet != null)
+        {
+            BuildSpreadsheetGrid(ViewModel.SelectedSheet);
+        }
+        
+        _isUpdatingCell = true;
+        CellValueBox.Text = string.Empty;
+        CellFormulaBox.Text = string.Empty;
+        CellNotesBox.Text = string.Empty;
+        _isUpdatingCell = false;
+        
+        ViewModel.StatusMessage = $"Cleared cell {_selectedCell.DisplayLabel}";
+    }
+    
+    private void InsertRowAbove_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedCell == null || ViewModel.SelectedSheet == null) return;
+        
+        var rowIndex = _selectedCell.Row;
+        ViewModel.SelectedSheet.InsertRow(rowIndex);
+        
+        BuildSpreadsheetGrid(ViewModel.SelectedSheet);
+        ViewModel.StatusMessage = $"Inserted row above row {rowIndex + 1}";
+    }
+    
+    private void InsertRowBelow_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedCell == null || ViewModel.SelectedSheet == null) return;
+        
+        var rowIndex = _selectedCell.Row + 1;
+        ViewModel.SelectedSheet.InsertRow(rowIndex);
+        
+        BuildSpreadsheetGrid(ViewModel.SelectedSheet);
+        ViewModel.StatusMessage = $"Inserted row below row {rowIndex}";
+    }
+    
+    private void InsertColumnLeft_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedCell == null || ViewModel.SelectedSheet == null) return;
+        
+        var colIndex = _selectedCell.Column;
+        ViewModel.SelectedSheet.InsertColumn(colIndex);
+        
+        BuildSpreadsheetGrid(ViewModel.SelectedSheet);
+        ViewModel.StatusMessage = $"Inserted column left of column {GetColumnName(colIndex)}";
+    }
+    
+    private void InsertColumnRight_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedCell == null || ViewModel.SelectedSheet == null) return;
+        
+        var colIndex = _selectedCell.Column + 1;
+        ViewModel.SelectedSheet.InsertColumn(colIndex);
+        
+        BuildSpreadsheetGrid(ViewModel.SelectedSheet);
+        ViewModel.StatusMessage = $"Inserted column right of column {GetColumnName(colIndex - 1)}";
+    }
+    
+    private void DeleteRow_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedCell == null || ViewModel.SelectedSheet == null) return;
+        
+        var rowIndex = _selectedCell.Row;
+        
+        if (ViewModel.SelectedSheet.Rows.Count <= 1)
+        {
+            ViewModel.StatusMessage = "Cannot delete the last row";
+            return;
+        }
+        
+        ViewModel.SelectedSheet.DeleteRow(rowIndex);
+        
+        BuildSpreadsheetGrid(ViewModel.SelectedSheet);
+        ViewModel.StatusMessage = $"Deleted row {rowIndex + 1}";
+    }
+    
+    private void DeleteColumn_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedCell == null || ViewModel.SelectedSheet == null) return;
+        
+        var colIndex = _selectedCell.Column;
+        
+        if (ViewModel.SelectedSheet.ColumnCount <= 1)
+        {
+            ViewModel.StatusMessage = "Cannot delete the last column";
+            return;
+        }
+        
+        ViewModel.SelectedSheet.DeleteColumn(colIndex);
+        
+        BuildSpreadsheetGrid(ViewModel.SelectedSheet);
+        ViewModel.StatusMessage = $"Deleted column {GetColumnName(colIndex)}";
+    }
+    
+    private string GetColumnName(int index)
+    {
+        string name = "";
+        while (index >= 0)
+        {
+            name = (char)('A' + (index % 26)) + name;
+            index = (index / 26) - 1;
+        }
+        return name;
     }
 }

@@ -7,6 +7,28 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
+    <Page.Resources>
+        <!-- Cell Context Menu (Phase 5 Task 16) -->
+        <MenuFlyout x:Key="CellContextMenu">
+            <MenuFlyoutItem Text="✂️ Cut" Click="Cut_Click" />
+            <MenuFlyoutItem Text="📋 Copy" Click="Copy_Click" />
+            <MenuFlyoutItem Text="📌 Paste" Click="Paste_Click" />
+            <MenuFlyoutSeparator/>
+            <MenuFlyoutItem Text="🗑️ Clear Contents" Click="ClearContents_Click" />
+            <MenuFlyoutSeparator/>
+            <MenuFlyoutSubItem Text="➕ Insert">
+                <MenuFlyoutItem Text="↑ Row Above" Click="InsertRowAbove_Click" />
+                <MenuFlyoutItem Text="↓ Row Below" Click="InsertRowBelow_Click" />
+                <MenuFlyoutItem Text="← Column Left" Click="InsertColumnLeft_Click" />
+                <MenuFlyoutItem Text="→ Column Right" Click="InsertColumnRight_Click" />
+            </MenuFlyoutSubItem>
+            <MenuFlyoutSubItem Text="➖ Delete">
+                <MenuFlyoutItem Text="❌ Row" Click="DeleteRow_Click" />
+                <MenuFlyoutItem Text="❌ Column" Click="DeleteColumn_Click" />
+            </MenuFlyoutSubItem>
+        </MenuFlyout>
+    </Page.Resources>
+
     <Grid Background="#1A1A1A">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
