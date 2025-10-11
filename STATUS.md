@@ -181,6 +181,35 @@ The AiCalc project is configured, tested, and ready. The project builds successf
 
 ### Current Phase Status
 
+**Phase 5: UI Polish & Enhancements** - 60% Complete (2 of 5 tasks) ✅
+
+**Completed Features**:
+- ✅ Task 14A: Keyboard Navigation (8+ shortcuts: F9, F2, arrows, Tab, Enter, Ctrl+Home/End, etc.)
+- ✅ Task 16: Context Menus (13 operations: Cut/Copy/Paste, Insert/Delete rows/columns)
+- ✅ Task 10: Theme System (Light/Dark/System app themes + 4 cell visual themes)
+
+**Skipped Tasks** (WinUI 3 XAML compiler bugs):
+- ⏭️ Task 14B: Resizable Panels (GridSplitter triggers compiler errors)
+- ⏭️ Task 15: Rich Cell Editing Dialogs (ContentDialog complex layouts fail)
+
+**Remaining Tasks** (4-6 hours):
+- ⏳ Task 11: Enhanced Formula Bar (autocomplete, syntax highlighting, validation)
+
+**Recent Commits**:
+- `753e829` - Task 14A: Keyboard Navigation
+- `c52b315` - Task 16: Context Menus
+- `43eca46` - Task 10: Theme System
+- `e724521` - Phase 5 Summary Documentation
+
+**See**: `docs/Phase5_Summary.md` for comprehensive details, technical challenges, and recommendations.
+
+**Next Steps**: 
+- Option A: Complete Task 11 (Enhanced Formula Bar) - ~4 hours
+- Option B: Add Settings Persistence + Undo/Redo - ~6 hours
+- Option C: Move to Phase 6 (Advanced Features)
+
+---
+
 **Phase 3: Multi-Threading & Dependency Management** - ~70% Complete ⚠️
 
 **Completed Components**:
@@ -191,10 +220,10 @@ The AiCalc project is configured, tested, and ready. The project builds successf
 - ✅ Progress tracking and cancellation support
 
 **Pending User Features** (5-16 hours depending on scope):
-- ⏳ F9 keyboard shortcut for recalculation (~2-3 hours)
+- ⏳ F9 keyboard shortcut for recalculation (~2-3 hours) - PARTIALLY DONE (keyboard shortcut exists)
 - ⏳ Recalculate All button (~30 minutes)
-- ⏳ Settings dialog for thread count (~3-4 hours)
-- ⏳ Theme system for color customization (~4-5 hours)
+- ⏳ Settings dialog for thread count (~3-4 hours) - DONE via Task 9 settings ✅
+- ⏳ Theme system for color customization (~4-5 hours) - DONE via Task 10 ✅
 - ⏳ Per-service timeout configuration (~2-3 hours)
 
 **See**: `docs/Phase3_Implementation.md` and `docs/Phase3_Alignment_Notes.md` for full details.
