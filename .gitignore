@@ -19,3 +19,7 @@ Desktop.ini
 
 # Application files
 *.log
+
+# Test artifacts
+tests/**/bin/
+tests/**/obj/
