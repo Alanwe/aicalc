@@ -19,6 +19,7 @@ public sealed partial class MainWindow : Page
     private Button? _selectedButton;
     private bool _isUpdatingCell = false;
     private List<FunctionSuggestion> _allFunctionSuggestions = new();
+    private PipeServer? _pipeServer;
 
     public MainWindow()
     {
@@ -37,6 +38,9 @@ public sealed partial class MainWindow : Page
         LoadFunctionsList();
         InitializeFunctionSuggestions();
         RefreshSheetTabs();
+        
+        // Start Python SDK pipe server
+        StartPipeServer();
     }
 
     private void InitializeFunctionSuggestions()
@@ -964,5 +968,30 @@ public sealed partial class MainWindow : Page
             index = (index / 26) - 1;
         }
         return name;
+    }
+    
+    // Python SDK Named Pipe Server
+    private void StartPipeServer()
+    {
+        try
+        {
+            _pipeServer = new PipeServer(
+                "AiCalcPipe",
+                ViewModel,
+                ViewModel.FunctionRunner,
+                DispatcherQueue);
+            _pipeServer.Start();
+            System.Diagnostics.Debug.WriteLine("Python SDK Pipe Server started successfully");
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Failed to start Pipe Server: {ex.Message}");
+        }
+    }
+    
+    private void StopPipeServer()
+    {
+        _pipeServer?.Dispose();
+        _pipeServer = null;
     }
 }
