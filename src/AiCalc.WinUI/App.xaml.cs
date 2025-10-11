@@ -61,6 +61,9 @@ public partial class App : Application
                 };
                 _window.Content = new MainWindow();
                 MainWindow = _window;
+                
+                // Apply application theme (default to System)
+                ApplyApplicationTheme(AppTheme.System);
             }
 
             _window.Activate();
@@ -128,5 +131,22 @@ public partial class App : Application
         Current.Resources["CellStateManualUpdateBrush"] = new SolidColorBrush(manualUpdate);
         Current.Resources["CellStateErrorBrush"] = new SolidColorBrush(error);
         Current.Resources["CellStateInDependencyChainBrush"] = new SolidColorBrush(dependency);
+    }
+
+    /// <summary>
+    /// Applies the selected application theme (Task 10)
+    /// </summary>
+    public static void ApplyApplicationTheme(AppTheme theme)
+    {
+        if (MainWindow?.Content is FrameworkElement rootElement)
+        {
+            rootElement.RequestedTheme = theme switch
+            {
+                AppTheme.Light => ElementTheme.Light,
+                AppTheme.Dark => ElementTheme.Dark,
+                AppTheme.System => ElementTheme.Default,
+                _ => ElementTheme.Default
+            };
+        }
     }
 }

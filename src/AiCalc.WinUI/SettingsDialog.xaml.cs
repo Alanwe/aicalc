@@ -24,7 +24,10 @@ public sealed partial class SettingsDialog : ContentDialog
         MaxThreadsLabel.Text = Settings.MaxEvaluationThreads.ToString();
         MaxThreadsDescription.Text = $"Using {Settings.MaxEvaluationThreads} threads (CPU cores detected: {cpuCores})";
         
-        // Initialize Appearance tab
+        // Initialize Appearance tab - Application Theme
+        AppThemeComboBox.SelectedIndex = (int)Settings.ApplicationTheme;
+        
+        // Initialize Appearance tab - Cell Visual Theme
         ThemeComboBox.SelectedIndex = (int)Settings.SelectedTheme;
         UpdateThemePreview(Settings.SelectedTheme);
     }
@@ -136,6 +139,31 @@ public sealed partial class SettingsDialog : ContentDialog
             var theme = (CellVisualTheme)ThemeComboBox.SelectedIndex;
             Settings.SelectedTheme = theme;
             UpdateThemePreview(theme);
+        }
+    }
+
+    private void AppThemeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (AppThemeComboBox.SelectedIndex >= 0)
+        {
+            var theme = (AppTheme)AppThemeComboBox.SelectedIndex;
+            Settings.ApplicationTheme = theme;
+            ApplyApplicationTheme(theme);
+        }
+    }
+
+    private void ApplyApplicationTheme(AppTheme theme)
+    {
+        var window = App.MainWindow;
+        if (window?.Content is FrameworkElement rootElement)
+        {
+            rootElement.RequestedTheme = theme switch
+            {
+                AppTheme.Light => ElementTheme.Light,
+                AppTheme.Dark => ElementTheme.Dark,
+                AppTheme.System => ElementTheme.Default,
+                _ => ElementTheme.Default
+            };
         }
     }
 

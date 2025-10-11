@@ -4,6 +4,16 @@ using System.Collections.ObjectModel;
 namespace AiCalc.Models;
 
 /// <summary>
+/// Application theme options (Task 10)
+/// </summary>
+public enum AppTheme
+{
+    System,
+    Light,
+    Dark
+}
+
+/// <summary>
 /// Cell visual state theme options (Task 10)
 /// </summary>
 public enum CellVisualTheme
@@ -34,5 +44,7 @@ public class WorkbookSettings
     public int DefaultEvaluationTimeoutSeconds { get; set; } = 100;
 
     // Appearance Settings (Task 10)
+    public AppTheme ApplicationTheme { get; set; } = AppTheme.System;
+    
     public CellVisualTheme SelectedTheme { get; set; } = CellVisualTheme.Light;
 }
