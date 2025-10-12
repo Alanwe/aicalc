@@ -33,11 +33,15 @@ Release Build: ✅ PASSING
 ```
 C:\Projects\aicalc\src\AiCalc.WinUI\
 ├── AiCalc.WinUI.csproj          ✅ Builds successfully
-├── App.xaml / App.xaml.cs       ✅ WinUI 3 application
-├── MainWindow.xaml / .cs        ✅ Main window (simple placeholder)
+├── App.xaml / App.xaml.cs       ✅ WinUI 3 application with theme support
+├── MainWindow.xaml / .cs        ✅ Full spreadsheet UI with keyboard nav & context menus
+├── SettingsDialog.xaml / .cs    ✅ AI service & theme configuration
+├── ServiceConnectionDialog.xaml ✅ AI provider connection setup
+├── EvaluationSettingsDialog.xaml ✅ Evaluation configuration
 ├── Models/                      ✅ All business models
-├── Services/                    ✅ Function registry & runner
+├── Services/                    ✅ Function registry, runner, & AI clients
 ├── ViewModels/                  ✅ MVVM layer complete
+├── Themes/                      ✅ Cell state theme resources
 └── Converters/                  ✅ UI converters (WinUI compatible)
 ```
 
@@ -166,12 +170,6 @@ warning NETSDK1206: Found version-specific or distribution-specific runtime iden
 ```
 **Impact**: None - This is informational. The app builds and runs correctly.
 **Explanation**: Windows App SDK 1.4 uses older RID naming. Not critical for development.
-
-### Original Uno Project:
-- Location: `src/AiCalc/`
-- Status: Preserved for reference
-- Note: Has unresolved XAML compiler issues
-- Recommendation: Use `src/AiCalc.WinUI/` for all development
 
 ---
 
