@@ -142,6 +142,13 @@ public sealed partial class SettingsDialog : ContentDialog
             
             // Apply theme to the application
             App.ApplyCellStateTheme(theme);
+            
+            // Refresh the main window grid to show theme changes
+            var mainWindow = App.MainWindow?.Content as MainWindow;
+            if (mainWindow?.ViewModel?.SelectedSheet != null)
+            {
+                mainWindow.BuildSpreadsheetGrid(mainWindow.ViewModel.SelectedSheet);
+            }
         }
     }
 

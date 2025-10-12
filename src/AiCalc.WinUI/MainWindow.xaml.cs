@@ -36,6 +36,8 @@ public sealed partial class MainWindow : Page
     private double _leftInitialWidth;
     private double _rightInitialWidth;
     private PipeServer? _pipeServer;
+    private bool _functionsVisible = true;
+    private bool _inspectorVisible = true;
 
     public MainWindow()
     {
@@ -136,7 +138,7 @@ public sealed partial class MainWindow : Page
         }
     }
 
-    private void BuildSpreadsheetGrid(SheetViewModel sheet)
+    internal void BuildSpreadsheetGrid(SheetViewModel sheet)
     {
         SpreadsheetGrid.Children.Clear();
         SpreadsheetGrid.RowDefinitions.Clear();
@@ -437,6 +439,27 @@ public sealed partial class MainWindow : Page
         if (e.Key == Windows.System.VirtualKey.Enter)
         {
             CommitCellEdit();
+            e.Handled = true;
+        }
+        else if (e.Key == Windows.System.VirtualKey.Tab)
+        {
+            // Commit current edit and move to next cell
+            CommitCellEdit();
+            
+            // Move to next cell (right if Tab, left if Shift+Tab)
+            var shift = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(Windows.System.VirtualKey.Shift).HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
+            var newCell = MoveSelection(shift ? -1 : 1, 0);
+            
+            // Start edit mode on the new cell
+            if (newCell != null)
+            {
+                var newButton = GetButtonForCell(newCell);
+                if (newButton != null)
+                {
+                    StartDirectEdit(newCell, newButton);
+                }
+            }
+            
             e.Handled = true;
         }
         else if (e.Key == Windows.System.VirtualKey.Escape)
@@ -1498,6 +1521,50 @@ public sealed partial class MainWindow : Page
     }
     
     // Python SDK Named Pipe Server
+    private void ToggleFunctionsPanel_Click(object sender, RoutedEventArgs e)
+    {
+        _functionsVisible = !_functionsVisible;
+        
+        if (_functionsVisible)
+        {
+            // Show panel
+            FunctionsColumn.Width = new GridLength(Math.Max(180, ViewModel.Settings.FunctionsPanelWidth));
+            FunctionsPanel.Visibility = Visibility.Visible;
+            ToggleFunctionsButton.Content = "◀";
+            ToggleFunctionsButton.SetValue(ToolTipService.ToolTipProperty, "Hide Functions Panel");
+        }
+        else
+        {
+            // Hide panel
+            FunctionsColumn.Width = new GridLength(0);
+            FunctionsPanel.Visibility = Visibility.Collapsed;
+            ToggleFunctionsButton.Content = "▶";
+            ToggleFunctionsButton.SetValue(ToolTipService.ToolTipProperty, "Show Functions Panel");
+        }
+    }
+    
+    private void ToggleInspectorPanel_Click(object sender, RoutedEventArgs e)
+    {
+        _inspectorVisible = !_inspectorVisible;
+        
+        if (_inspectorVisible)
+        {
+            // Show panel
+            InspectorColumn.Width = new GridLength(Math.Max(220, ViewModel.Settings.InspectorPanelWidth));
+            InspectorPanel.Visibility = Visibility.Visible;
+            ToggleInspectorButton.Content = "▶";
+            ToggleInspectorButton.SetValue(ToolTipService.ToolTipProperty, "Hide Inspector Panel");
+        }
+        else
+        {
+            // Hide panel
+            InspectorColumn.Width = new GridLength(0);
+            InspectorPanel.Visibility = Visibility.Collapsed;
+            ToggleInspectorButton.Content = "◀";
+            ToggleInspectorButton.SetValue(ToolTipService.ToolTipProperty, "Show Inspector Panel");
+        }
+    }
+
     private void StartPipeServer()
     {
         try

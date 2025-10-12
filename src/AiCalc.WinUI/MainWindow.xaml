@@ -75,9 +75,20 @@
             </Grid.ColumnDefinitions>
             
             <!-- Left Panel - Functions -->
-            <Border Grid.Column="0" Background="#2D2D30" Padding="16" CornerRadius="8" Margin="0,0,6,0">
+            <Border x:Name="FunctionsPanel" Grid.Column="0" Background="#2D2D30" Padding="16" CornerRadius="8" Margin="0,0,6,0">
                 <StackPanel Spacing="12">
-                    <TextBlock Text="📚 Functions" FontSize="16" FontWeight="SemiBold" Foreground="White" />
+                    <Grid>
+                        <TextBlock Text="📚 Functions" FontSize="16" FontWeight="SemiBold" Foreground="White" HorizontalAlignment="Left" />
+                        <Button x:Name="ToggleFunctionsButton" 
+                                Content="◀" 
+                                Click="ToggleFunctionsPanel_Click"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                FontSize="14"
+                                Foreground="White"
+                                HorizontalAlignment="Right"
+                                ToolTipService.ToolTip="Hide Functions Panel" />
+                    </Grid>
                     <ScrollViewer MaxHeight="600" VerticalScrollBarVisibility="Auto">
                         <StackPanel x:Name="FunctionsList" Spacing="8"/>
                     </ScrollViewer>
@@ -147,10 +158,21 @@
             PointerExited="Splitter_PointerExited"/>
             
             <!-- Right Panel - Cell Inspector -->
-            <Border Grid.Column="4" Background="#2D2D30" Padding="16" CornerRadius="8" Margin="6,0,0,0">
+            <Border x:Name="InspectorPanel" Grid.Column="4" Background="#2D2D30" Padding="16" CornerRadius="8" Margin="6,0,0,0">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Spacing="16">
-                        <TextBlock Text="🔍 Cell Inspector" FontSize="16" FontWeight="SemiBold" Foreground="White" />
+                        <Grid>
+                            <TextBlock Text="🔍 Cell Inspector" FontSize="16" FontWeight="SemiBold" Foreground="White" HorizontalAlignment="Left" />
+                            <Button x:Name="ToggleInspectorButton" 
+                                    Content="▶" 
+                                    Click="ToggleInspectorPanel_Click"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    FontSize="14"
+                                    Foreground="White"
+                                    HorizontalAlignment="Right"
+                                    ToolTipService.ToolTip="Hide Inspector Panel" />
+                        </Grid>
                         
                         <StackPanel x:Name="CellInspectorPanel" Spacing="12" Visibility="Collapsed">
                             <TextBlock x:Name="CellLabel" 
