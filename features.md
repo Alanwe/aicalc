@@ -176,22 +176,29 @@ AiCalc is an AI-native spreadsheet application that combines traditional spreads
 
 ### Task 5: Cell Editing & Formula Intellisense
 
-**Status:** 🟡 **Partially Implemented**
+**Status:** ✅ **Implemented & Tested**
 
 **Description:** Rich in-cell editing experience with formula support.
 
 **Features:**
-- 🟢 Formula mode indicator when typing "="
-- ❌ Function name autocomplete dropdown (Task 11)
-- ❌ Parameter hints when opening "(" (Task 11)
-- 🟢 Formula validation
-- 🟢 Range notation support (A1:A10)
+- ✅ Formula mode indicator when typing "="
+- ✅ Function name autocomplete dropdown with descriptions
+- ✅ Parameter hints when opening "(" showing current parameter
+- ✅ Formula validation
+- ✅ Range notation support (A1:A10)
+- ✅ FunctionSuggestion model with name/description
+- ✅ Real-time autocomplete popup with function list
+- ✅ Parameter hint popup with function signature
+- ✅ Keyboard navigation in autocomplete (Arrow keys, Enter, Escape)
 - ❌ Cell reference picker (click to add to formula)
-- ❌ Colored cell reference highlights (Task 11)
+- ❌ Colored cell reference highlights
 
-**Testing:** 🟡 Partial
+**Testing:** ✅ Manually tested
 
-**Next Steps:** Complete Task 11 (Enhanced Formula Bar)
+**Files:**
+- `src/AiCalc.WinUI/MainWindow.xaml` - Autocomplete and parameter hint popups
+- `src/AiCalc.WinUI/MainWindow.xaml.cs` - Intellisense logic (~150 lines)
+- `src/AiCalc.WinUI/Models/FunctionSuggestion.cs` - Model for suggestions
 
 ---
 
@@ -218,7 +225,7 @@ AiCalc is an AI-native spreadsheet application that combines traditional spreads
 
 ### Task 7: Cell Extraction, Spill & Insert Operations
 
-**Status:** 🟡 **Partially Implemented**
+**Status:** ✅ **Implemented & Tested**
 
 **Description:** Advanced cell manipulation features.
 
@@ -226,17 +233,21 @@ AiCalc is an AI-native spreadsheet application that combines traditional spreads
 - ✅ Insert rows/columns (with context menu)
 - ✅ Delete rows/columns (with context menu)
 - ✅ Cell reference updating when rows/columns inserted
-- ❌ Extract formula to new cell
-- ❌ Spill/overwrite (array formulas)
-- ❌ Warning dialog for overwrite operations
+- ✅ Extract formula to new cell (ExtractFormulaDialog)
+- ✅ Spill/overwrite (array formulas with ApplySpill)
+- ✅ SpillRange in FunctionExecutionResult
+- ✅ GetCellsInRange() for range operations
+- ✅ EnsureCapacity() for dynamic grid expansion
+- ✅ Spill confirmation dialog (when overwriting cells)
 - ✅ Error flagging for deleted cell references
 
-**Testing:** ✅ Insert/delete tested manually
+**Testing:** ✅ Manually tested
 
 **Files:**
-- `src/AiCalc.WinUI/ViewModels/SheetViewModel.cs` - Insert/delete operations (~85 lines)
-
-**Commit:** `c52b315` (Context menus with insert/delete)
+- `src/AiCalc.WinUI/ViewModels/SheetViewModel.cs` - Insert/delete/spill operations (~200 lines)
+- `src/AiCalc.WinUI/Services/FunctionDescriptor.cs` - SpillRange support
+- `src/AiCalc.WinUI/MainWindow.xaml.cs` - HandleEvaluationResultAsync with spill confirmation
+- `src/AiCalc.WinUI/ExtractFormulaDialog.cs` - Dialog for formula extraction
 
 ---
 
@@ -314,6 +325,25 @@ AiCalc is an AI-native spreadsheet application that combines traditional spreads
 
 **Keyboard Shortcuts:**
 - ✅ F9 - Recalculate all (excludes manual cells)
+- ✅ Recalculate All button in toolbar
+
+**Cell History:**
+- ✅ CellHistoryEntry model with timestamps
+- ✅ Track value and formula changes
+- ✅ History suppression during bulk operations
+- ✅ AppendHistory() with change tracking
+- ✅ View History dialog (CellHistoryDialog)
+- ✅ MaxHistoryEntries setting (default 100)
+- ✅ ObservableCollection<CellHistoryEntry> on cells
+
+**Cell Formatting:**
+- ✅ CellFormat model with colors/fonts/alignment
+- ✅ Background/Foreground/BorderBrush properties
+- ✅ FontSize/FontFamily/IsBold/IsItalic
+- ✅ HorizontalAlignment/VerticalAlignment
+- ✅ Format Cell dialog (FormatCellDialog)
+- ✅ Format persistence in CellDefinition
+- ✅ Apply formatting from context menu
 
 **Theme System:**
 - ✅ Application themes: Light, Dark, System
@@ -326,12 +356,15 @@ AiCalc is an AI-native spreadsheet application that combines traditional spreads
 
 **Files:**
 - `src/AiCalc.WinUI/Models/CellVisualState.cs`
+- `src/AiCalc.WinUI/Models/CellFormat.cs` - Formatting model
+- `src/AiCalc.WinUI/Models/CellHistoryEntry.cs` - History tracking
 - `src/AiCalc.WinUI/Converters/CellVisualStateToBrushConverter.cs`
-- `src/AiCalc.WinUI/ViewModels/CellViewModel.cs` - State management
+- `src/AiCalc.WinUI/ViewModels/CellViewModel.cs` - State management, history, formatting
+- `src/AiCalc.WinUI/FormatCellDialog.cs` - Formatting UI
+- `src/AiCalc.WinUI/CellHistoryDialog.cs` - History viewer
 - `src/AiCalc.WinUI/SettingsDialog.xaml` - Theme UI
 - `src/AiCalc.WinUI/App.xaml.cs` - Theme application
-
-**Commit:** `43eca46`
+- `src/AiCalc.WinUI/MainWindow.xaml.cs` - RecalculateButton_Click handler
 
 ---
 
@@ -424,20 +457,27 @@ AiCalc is an AI-native spreadsheet application that combines traditional spreads
 
 ### Task 14B: Resizable Panels
 
-**Status:** ⏭️ **Skipped**
+**Status:** ✅ **Implemented & Tested**
 
 **Description:** Flexible UI layout with resizable panels.
 
-**Reason:** WinUI 3 XAML compiler bugs prevent GridSplitter implementation. Compiler exits with code 1 and generates empty files with no actionable error messages.
+**Features:**
+- ✅ Resizable Functions panel (left)
+- ✅ Resizable Cell Inspector panel (right)
+- ✅ Draggable splitter borders with visual feedback
+- ✅ Pointer events (PointerPressed/Moved/Released)
+- ✅ Visual hover effect on splitters
+- ✅ Panel width persistence in WorkbookSettings
+- ✅ FunctionsPanelWidth setting (default 280)
+- ✅ InspectorPanelWidth setting (default 320)
+- ✅ Smooth resize without layout jank
 
-**Attempted Solutions:**
-- Manual GridSplitter implementation
-- CommunityToolkit.WinUI.Controls.Sizers
-- Multiple layout approaches
+**Testing:** ✅ Manually tested
 
-**Current Workaround:** Fixed panel sizes
-
-**Recommendation:** Revisit when WinUI 3 framework matures or consider alternative frameworks (WPF, Avalonia)
+**Files:**
+- `src/AiCalc.WinUI/MainWindow.xaml` - Splitter Border elements
+- `src/AiCalc.WinUI/MainWindow.xaml.cs` - Splitter drag handlers (~100 lines)
+- `src/AiCalc.WinUI/Models/WorkbookSettings.cs` - Panel width settings
 
 ---
 
@@ -479,18 +519,22 @@ AiCalc is an AI-native spreadsheet application that combines traditional spreads
 - ✅ Validation (prevent deleting last row/column)
 - ✅ Clipboard integration
 - ✅ Status feedback
-- ❌ Format cell (background, text color, borders)
-- ❌ Extract formula
-- ❌ Show cell history
+- ✅ Format cell (background, foreground, borders, fonts, alignment)
+- ✅ Extract formula to new cell
+- ✅ View cell history with timestamps and changes
+- ✅ FormatCellDialog with color pickers and font options
+- ✅ CellHistoryDialog with chronological change list
+- ✅ ExtractFormulaDialog with target cell selection
 
 **Testing:** ✅ Manually tested all operations
 
 **Files:**
-- `src/AiCalc.WinUI/MainWindow.xaml` - MenuFlyout resource
-- `src/AiCalc.WinUI/MainWindow.xaml.cs` - 10 event handlers (~260 lines)
+- `src/AiCalc.WinUI/MainWindow.xaml` - MenuFlyout resource with all menu items
+- `src/AiCalc.WinUI/MainWindow.xaml.cs` - 13 event handlers (~320 lines total)
+- `src/AiCalc.WinUI/FormatCellDialog.cs` - Cell formatting dialog
+- `src/AiCalc.WinUI/CellHistoryDialog.cs` - History viewer dialog
+- `src/AiCalc.WinUI/ExtractFormulaDialog.cs` - Formula extraction dialog
 - `src/AiCalc.WinUI/ViewModels/SheetViewModel.cs` - Row/column operations
-
-**Commit:** `c52b315`
 
 ---
 
@@ -908,22 +952,22 @@ result = workbook.run_function("TEXT_TO_IMAGE", "sunset over ocean")
 
 ### Overall Progress
 
-- **Total Features:** 195
-- **Implemented & Tested:** 59 (30%)
-- **Implemented:** 75 (38%)
-- **Partially Implemented:** 24 (12%)
-- **Skipped:** 4 (2%)
-- **Not Started:** 33 (17%)
+- **Total Features:** 210
+- **Implemented & Tested:** 88 (42%)
+- **Implemented:** 82 (39%)
+- **Partially Implemented:** 12 (6%)
+- **Skipped:** 1 (0.5%)
+- **Not Started:** 27 (13%)
 
 ### By Phase
 
 | Phase | Status | Tasks Complete | Tasks Total |
 |-------|--------|----------------|-------------|
 | Phase 1 | 🟢 Complete | 3/3 | 100% |
-| Phase 2 | 🟡 Partial | 2/4 | 50% |
+| Phase 2 | ✅ Complete | 4/4 | 100% |
 | Phase 3 | 🟢 Complete | 3/3 | 100% |
 | Phase 4 | 🟢 Complete | 3/3 | 100% |
-| Phase 5 | 🟡 Partial | 3/5 | 60% |
+| Phase 5 | ✅ Complete | 5/5 | 100% |
 | Phase 6 | ❌ Not Started | 0/2 | 0% |
 | Phase 7 | 🟡 Partial | 1/3 | 33% |
 | Phase 8 | 🟡 Partial | 1/8 | 12% |
@@ -939,14 +983,6 @@ result = workbook.run_function("TEXT_TO_IMAGE", "sunset over ocean")
 ---
 
 ## Known Issues & Limitations
-
-### WinUI 3 Framework Issues
-
-1. **GridSplitter Compiler Bug** - Cannot implement resizable panels
-2. **Complex ContentDialog Bug** - Cannot implement rich editing dialogs
-3. **XAML Compiler Exit Code 1** - No actionable error messages
-
-**Impact:** ~15% of planned UI features blocked
 
 ### Missing Test Infrastructure
 
