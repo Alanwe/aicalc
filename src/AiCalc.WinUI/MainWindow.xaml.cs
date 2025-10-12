@@ -38,6 +38,7 @@ public sealed partial class MainWindow : Page
     private PipeServer? _pipeServer;
     private bool _functionsVisible = true;
     private bool _inspectorVisible = true;
+    private bool _isNavigatingBetweenCells = false;
 
     public MainWindow()
     {
@@ -431,7 +432,11 @@ public sealed partial class MainWindow : Page
 
     private void CellEditBox_LostFocus(object sender, RoutedEventArgs e)
     {
-        CommitCellEdit();
+        // Don't commit if we're navigating between cells (Tab key)
+        if (!_isNavigatingBetweenCells)
+        {
+            CommitCellEdit();
+        }
     }
 
     private void CellEditBox_KeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
@@ -443,6 +448,9 @@ public sealed partial class MainWindow : Page
         }
         else if (e.Key == Windows.System.VirtualKey.Tab)
         {
+            // Set flag to prevent LostFocus from committing
+            _isNavigatingBetweenCells = true;
+            
             // Commit current edit and move to next cell
             CommitCellEdit();
             
@@ -456,8 +464,21 @@ public sealed partial class MainWindow : Page
                 var newButton = GetButtonForCell(newCell);
                 if (newButton != null)
                 {
-                    StartDirectEdit(newCell, newButton);
+                    // Use dispatcher to ensure focus is set after control is visible
+                    DispatcherQueue.TryEnqueue(() =>
+                    {
+                        StartDirectEdit(newCell, newButton);
+                        _isNavigatingBetweenCells = false;
+                    });
                 }
+                else
+                {
+                    _isNavigatingBetweenCells = false;
+                }
+            }
+            else
+            {
+                _isNavigatingBetweenCells = false;
             }
             
             e.Handled = true;
@@ -1532,6 +1553,7 @@ public sealed partial class MainWindow : Page
             FunctionsPanel.Visibility = Visibility.Visible;
             ToggleFunctionsButton.Content = "◀";
             ToggleFunctionsButton.SetValue(ToolTipService.ToolTipProperty, "Hide Functions Panel");
+            ShowFunctionsButton.Visibility = Visibility.Collapsed;
         }
         else
         {
@@ -1540,6 +1562,7 @@ public sealed partial class MainWindow : Page
             FunctionsPanel.Visibility = Visibility.Collapsed;
             ToggleFunctionsButton.Content = "▶";
             ToggleFunctionsButton.SetValue(ToolTipService.ToolTipProperty, "Show Functions Panel");
+            ShowFunctionsButton.Visibility = Visibility.Visible;
         }
     }
     
@@ -1554,6 +1577,7 @@ public sealed partial class MainWindow : Page
             InspectorPanel.Visibility = Visibility.Visible;
             ToggleInspectorButton.Content = "▶";
             ToggleInspectorButton.SetValue(ToolTipService.ToolTipProperty, "Hide Inspector Panel");
+            ShowInspectorButton.Visibility = Visibility.Collapsed;
         }
         else
         {
@@ -1562,6 +1586,7 @@ public sealed partial class MainWindow : Page
             InspectorPanel.Visibility = Visibility.Collapsed;
             ToggleInspectorButton.Content = "◀";
             ToggleInspectorButton.SetValue(ToolTipService.ToolTipProperty, "Show Inspector Panel");
+            ShowInspectorButton.Visibility = Visibility.Visible;
         }
     }
 

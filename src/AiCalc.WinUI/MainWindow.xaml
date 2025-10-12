@@ -95,8 +95,8 @@
                 </StackPanel>
             </Border>
 
-            <!-- Left Splitter -->
-        <Border Grid.Column="1"
+            <!-- Left Splitter / Show Functions Button -->
+        <Border x:Name="LeftSplitter" Grid.Column="1"
             Margin="0"
             Background="#22FFFFFF"
             CornerRadius="2"
@@ -105,7 +105,22 @@
             PointerReleased="LeftSplitter_PointerReleased"
             PointerCaptureLost="LeftSplitter_PointerReleased"
             PointerEntered="Splitter_PointerEntered"
-            PointerExited="Splitter_PointerExited"/>
+            PointerExited="Splitter_PointerExited">
+            <Button x:Name="ShowFunctionsButton"
+                    Content="▶"
+                    Visibility="Collapsed"
+                    Click="ToggleFunctionsPanel_Click"
+                    Background="#44FFFFFF"
+                    BorderThickness="0"
+                    FontSize="12"
+                    Foreground="White"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Width="32"
+                    Height="32"
+                    CornerRadius="16"
+                    ToolTipService.ToolTip="Show Functions Panel" />
+        </Border>
             
             <!-- Center Panel - Spreadsheet -->
             <Border Grid.Column="2" Background="#2D2D30" Padding="8" CornerRadius="8">
@@ -145,8 +160,8 @@
                 </Grid>
             </Border>
 
-            <!-- Right Splitter -->
-        <Border Grid.Column="3"
+            <!-- Right Splitter / Show Inspector Button -->
+        <Border x:Name="RightSplitter" Grid.Column="3"
             Margin="0"
             Background="#22FFFFFF"
             CornerRadius="2"
@@ -155,7 +170,22 @@
             PointerReleased="RightSplitter_PointerReleased"
             PointerCaptureLost="RightSplitter_PointerReleased"
             PointerEntered="Splitter_PointerEntered"
-            PointerExited="Splitter_PointerExited"/>
+            PointerExited="Splitter_PointerExited">
+            <Button x:Name="ShowInspectorButton"
+                    Content="◀"
+                    Visibility="Collapsed"
+                    Click="ToggleInspectorPanel_Click"
+                    Background="#44FFFFFF"
+                    BorderThickness="0"
+                    FontSize="12"
+                    Foreground="White"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Width="32"
+                    Height="32"
+                    CornerRadius="16"
+                    ToolTipService.ToolTip="Show Inspector Panel" />
+        </Border>
             
             <!-- Right Panel - Cell Inspector -->
             <Border x:Name="InspectorPanel" Grid.Column="4" Background="#2D2D30" Padding="16" CornerRadius="8" Margin="6,0,0,0">
