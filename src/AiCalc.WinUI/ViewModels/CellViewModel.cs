@@ -248,7 +248,8 @@ public partial class CellViewModel : ObservableObject
         using (SuppressHistory())
         {
             Format = definition.Format ?? CellFormat.Default;
-            ReplaceHistory(definition.History ?? Array.Empty<CellHistoryEntry>());
+            var persistedHistory = definition.History as IEnumerable<CellHistoryEntry> ?? Array.Empty<CellHistoryEntry>();
+            ReplaceHistory(persistedHistory);
             AutomationMode = definition.AutomationMode;
             Notes = definition.Notes;
             Value = definition.Value ?? CellValue.Empty;
@@ -401,7 +402,7 @@ public partial class CellViewModel : ObservableObject
 
     partial void OnFormulaChanging(string? value)
     {
-        _formulaBeforeChange = _formula;
+    _formulaBeforeChange = Formula;
     }
 
     partial void OnFormulaChanged(string? value)
