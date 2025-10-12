@@ -47,4 +47,13 @@ public class WorkbookSettings
     public AppTheme ApplicationTheme { get; set; } = AppTheme.System;
     
     public CellVisualTheme SelectedTheme { get; set; } = CellVisualTheme.Light;
+
+    // History / UI (Phase 5 enhancements)
+    public int MaxHistoryEntries { get; set; } = 100;
+
+    public double FunctionsPanelWidth { get; set; } = 280;
+
+    public double InspectorPanelWidth { get; set; } = 320;
+
+    public bool EnterMovesDown { get; set; } = true;
 }

@@ -110,11 +110,16 @@ public class EvaluationEngine
 
             if (result != null)
             {
-                cell.Value = result.Value;
-                
+                cell.ApplyEvaluationResult(result, "Auto Evaluate");
+
+                if (result.HasSpill && cell.Sheet != null)
+                {
+                    cell.Sheet.ApplySpill(cell, result.SpillRange!);
+                }
+
                 // Notify if value changed
                 var newValue = cell.DisplayValue;
-                if (oldValue != newValue)
+                if (!string.Equals(oldValue, newValue, StringComparison.Ordinal))
                 {
                     CellValueChanged?.Invoke(this, (cell.Address, oldValue, newValue));
                 }

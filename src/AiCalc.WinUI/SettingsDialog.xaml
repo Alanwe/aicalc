@@ -26,7 +26,7 @@
         </Style>
     </ContentDialog.Resources>
 
-    <ScrollViewer MaxHeight="600" MaxWidth="800">
+    <ScrollViewer MaxHeight="600" MaxWidth="800" MinHeight="600" MinWidth="800">
         <Pivot>
             <!-- AI Services Tab -->
             <PivotItem Header="AI Services">

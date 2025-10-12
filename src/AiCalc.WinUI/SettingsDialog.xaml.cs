@@ -139,6 +139,9 @@ public sealed partial class SettingsDialog : ContentDialog
             var theme = (CellVisualTheme)ThemeComboBox.SelectedIndex;
             Settings.SelectedTheme = theme;
             UpdateThemePreview(theme);
+            
+            // Apply theme to the application
+            App.ApplyCellStateTheme(theme);
         }
     }
 
