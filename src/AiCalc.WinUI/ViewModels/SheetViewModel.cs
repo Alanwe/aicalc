@@ -46,6 +46,75 @@ public class SheetViewModel
 
     public IEnumerable<CellViewModel> Cells => Rows.SelectMany(r => r.Cells);
 
+    public void EnsureCapacity(int minimumRows, int minimumColumns)
+    {
+        EnsureRowCapacity(minimumRows);
+        EnsureColumnCapacity(minimumColumns);
+    }
+
+    public IReadOnlyList<CellViewModel> GetCellsInRange(CellViewModel origin, int height, int width)
+    {
+        var cells = new List<CellViewModel>();
+        for (int r = 0; r < height; r++)
+        {
+            var rowIndex = origin.Row + r;
+            if (rowIndex >= Rows.Count)
+            {
+                break;
+            }
+
+            var row = Rows[rowIndex];
+            for (int c = 0; c < width; c++)
+            {
+                var columnIndex = origin.Column + c;
+                if (columnIndex >= row.Cells.Count)
+                {
+                    break;
+                }
+
+                cells.Add(row.Cells[columnIndex]);
+            }
+        }
+
+        return cells;
+    }
+
+    public List<CellViewModel> ApplySpill(CellViewModel origin, CellValue[,] values)
+    {
+        var affected = new List<CellViewModel>();
+        var requiredRows = origin.Row + values.GetLength(0);
+        var requiredColumns = origin.Column + values.GetLength(1);
+
+        EnsureCapacity(requiredRows, requiredColumns);
+
+        for (int r = 0; r < values.GetLength(0); r++)
+        {
+            for (int c = 0; c < values.GetLength(1); c++)
+            {
+                var rowIndex = origin.Row + r;
+                var columnIndex = origin.Column + c;
+                var cell = Rows[rowIndex].Cells[columnIndex];
+
+                if (cell == origin)
+                {
+                    continue;
+                }
+
+                using (cell.SuppressHistory())
+                {
+                    cell.Value = values[r, c];
+                    cell.Formula = null;
+                    cell.AutomationMode = CellAutomationMode.Manual;
+                }
+
+                cell.MarkAsUpdated();
+                affected.Add(cell);
+            }
+        }
+
+        return affected;
+    }
+
     /// <summary>
     /// Evaluate all cells in this sheet using multi-threaded evaluation engine
     /// Skips cells with Manual automation mode per Task 10 requirement
@@ -81,6 +150,27 @@ public class SheetViewModel
         }
 
         return row;
+    }
+
+    private void EnsureRowCapacity(int minimumRows)
+    {
+        while (Rows.Count < minimumRows)
+        {
+            var newRow = CreateRow(Rows.Count, ColumnCount);
+            Rows.Add(newRow);
+        }
+    }
+
+    private void EnsureColumnCapacity(int minimumColumns)
+    {
+        while (ColumnCount < minimumColumns)
+        {
+            foreach (var row in Rows)
+            {
+                var newCell = new CellViewModel(_workbook, this, row.Index, row.Cells.Count);
+                row.Cells.Add(newCell);
+            }
+        }
     }
     
     // ==================== Row/Column Operations (Phase 5 Task 16) ====================
@@ -151,13 +241,8 @@ public class SheetViewModel
         for (int c = 0; c < oldRow.Cells.Count; c++)
         {
             var oldCell = oldRow.Cells[c];
-            var newCell = new CellViewModel(_workbook, this, newIndex, c)
-            {
-                RawValue = oldCell.RawValue,
-                Formula = oldCell.Formula,
-                Notes = oldCell.Notes,
-                AutomationMode = oldCell.AutomationMode
-            };
+            var newCell = new CellViewModel(_workbook, this, newIndex, c);
+            newCell.CopyFrom(oldCell);
             newRow.Cells.Add(newCell);
         }
         return newRow;
@@ -165,12 +250,8 @@ public class SheetViewModel
     
     private CellViewModel RecreateCellWithNewIndex(CellViewModel oldCell, int newRow, int newCol)
     {
-        return new CellViewModel(_workbook, this, newRow, newCol)
-        {
-            RawValue = oldCell.RawValue,
-            Formula = oldCell.Formula,
-            Notes = oldCell.Notes,
-            AutomationMode = oldCell.AutomationMode
-        };
+        var newCell = new CellViewModel(_workbook, this, newRow, newCol);
+        newCell.CopyFrom(oldCell);
+        return newCell;
     }
 }

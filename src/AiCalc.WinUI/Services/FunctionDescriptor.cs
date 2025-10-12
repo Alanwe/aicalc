@@ -123,6 +123,13 @@ public class FunctionParameter
     }
 }
 
-public record FunctionExecutionResult(CellValue Value, string? Diagnostics = null);
+public record FunctionExecutionResult(
+    CellValue Value,
+    string? Diagnostics = null,
+    CellValue[,]? SpillRange = null,
+    IReadOnlyList<CellAddress>? ReferencedCells = null)
+{
+    public bool HasSpill => SpillRange is { Length: > 0 };
+}
 
 public record FunctionEvaluationContext(WorkbookViewModel Workbook, SheetViewModel Sheet, IReadOnlyList<CellViewModel> Arguments, string RawFormula);

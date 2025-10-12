@@ -4,11 +4,16 @@ using AiCalc.ViewModels;
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Text;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
+using Windows.Foundation;
 using Windows.UI;
+using Windows.UI.Text;
 
 namespace AiCalc;
 
@@ -19,6 +24,17 @@ public sealed partial class MainWindow : Page
     private Button? _selectedButton;
     private bool _isUpdatingCell = false;
     private List<FunctionSuggestion> _allFunctionSuggestions = new();
+    private readonly Dictionary<string, FunctionDescriptor> _functionMap = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<ParameterHintItem> _parameterHints = new();
+    private bool _isFormulaEditing;
+    private CellViewModel? _formulaEditTargetCell;
+    private readonly List<(CellViewModel Cell, CellVisualState PreviousState)> _formulaHighlights = new();
+    private bool _isLeftSplitterDragging;
+    private bool _isRightSplitterDragging;
+    private Point _leftSplitterStart;
+    private Point _rightSplitterStart;
+    private double _leftInitialWidth;
+    private double _rightInitialWidth;
     private PipeServer? _pipeServer;
 
     public MainWindow()
@@ -38,16 +54,26 @@ public sealed partial class MainWindow : Page
         LoadFunctionsList();
         InitializeFunctionSuggestions();
         RefreshSheetTabs();
+        ApplyStoredPanelWidths();
         
         // Start Python SDK pipe server
         StartPipeServer();
     }
 
+    private void ApplyStoredPanelWidths()
+    {
+        FunctionsColumn.Width = new GridLength(Math.Max(180, ViewModel.Settings.FunctionsPanelWidth));
+        InspectorColumn.Width = new GridLength(Math.Max(220, ViewModel.Settings.InspectorPanelWidth));
+    }
+
     private void InitializeFunctionSuggestions()
     {
         _allFunctionSuggestions.Clear();
+        _functionMap.Clear();
+
         foreach (var func in ViewModel.FunctionRegistry.Functions)
         {
+            _functionMap[func.Name] = func;
             var paramNames = func.Parameters.Select(p => p.Name).ToList();
             _allFunctionSuggestions.Add(new FunctionSuggestion
             {
@@ -216,7 +242,7 @@ public sealed partial class MainWindow : Page
         var valueText = new TextBlock
         {
             Text = cellVm.DisplayValue,
-            Foreground = new SolidColorBrush(Microsoft.UI.Colors.White),
+            Foreground = new SolidColorBrush(Colors.White),
             FontSize = 13,
             TextWrapping = TextWrapping.Wrap,
             MaxLines = 3,
@@ -227,6 +253,7 @@ public sealed partial class MainWindow : Page
         stack.Children.Add(valueText);
         
         button.Content = stack;
+        ApplyCellStyling(button, cellVm, valueText);
         button.Click += (s, e) => SelectCell(cellVm, button);
         button.DoubleTapped += (s, e) => StartDirectEdit(cellVm, button);
         
@@ -235,6 +262,83 @@ public sealed partial class MainWindow : Page
         button.RightTapped += (s, e) => SelectCell(cellVm, button);
         
         return button;
+    }
+
+    private void ApplyCellStyling(Button button, CellViewModel cellVm, TextBlock? valueText = null)
+    {
+        var backgroundColor = ParseColor(cellVm.FormatBackground);
+        button.Background = new SolidColorBrush(backgroundColor);
+
+        var borderColor = ParseColor(cellVm.FormatBorder);
+        button.BorderBrush = new SolidColorBrush(borderColor);
+        button.BorderThickness = new Thickness(cellVm.Format.BorderThickness);
+
+        valueText ??= (button.Content as StackPanel)?.Children.OfType<TextBlock>().FirstOrDefault();
+        if (valueText != null)
+        {
+            valueText.Text = cellVm.DisplayValue;
+            valueText.Foreground = new SolidColorBrush(ParseColor(cellVm.FormatForeground));
+            valueText.FontSize = cellVm.Format.FontSize;
+            valueText.FontWeight = cellVm.Format.IsBold ? FontWeights.SemiBold : FontWeights.Normal;
+            valueText.FontStyle = cellVm.Format.IsItalic ? FontStyle.Italic : FontStyle.Normal;
+        }
+
+        switch (cellVm.VisualState)
+        {
+            case CellVisualState.InDependencyChain:
+                button.BorderBrush = new SolidColorBrush(Colors.DeepSkyBlue);
+                button.BorderThickness = new Thickness(2);
+                break;
+            case CellVisualState.Error:
+                button.BorderBrush = new SolidColorBrush(Colors.OrangeRed);
+                button.BorderThickness = new Thickness(2);
+                break;
+            case CellVisualState.JustUpdated:
+                button.BorderBrush = new SolidColorBrush(Colors.LimeGreen);
+                button.BorderThickness = new Thickness(2);
+                break;
+        }
+    }
+
+    private static Color ParseColor(string? hex)
+    {
+        if (string.IsNullOrWhiteSpace(hex))
+        {
+            return Color.FromArgb(0xFF, 0x2D, 0x2D, 0x30);
+        }
+
+        var span = hex.AsSpan().TrimStart('#');
+        try
+        {
+            byte a = 0xFF;
+            byte r;
+            byte g;
+            byte b;
+
+            if (span.Length == 6)
+            {
+                r = Convert.ToByte(span.Slice(0, 2).ToString(), 16);
+                g = Convert.ToByte(span.Slice(2, 2).ToString(), 16);
+                b = Convert.ToByte(span.Slice(4, 2).ToString(), 16);
+            }
+            else if (span.Length == 8)
+            {
+                a = Convert.ToByte(span.Slice(0, 2).ToString(), 16);
+                r = Convert.ToByte(span.Slice(2, 2).ToString(), 16);
+                g = Convert.ToByte(span.Slice(4, 2).ToString(), 16);
+                b = Convert.ToByte(span.Slice(6, 2).ToString(), 16);
+            }
+            else
+            {
+                return Color.FromArgb(0xFF, 0x2D, 0x2D, 0x30);
+            }
+
+            return Color.FromArgb(a, r, g, b);
+        }
+        catch
+        {
+            return Color.FromArgb(0xFF, 0x2D, 0x2D, 0x30);
+        }
     }
 
     private void AddCell(FrameworkElement element, int row, int col)
@@ -246,6 +350,12 @@ public sealed partial class MainWindow : Page
 
     private void SelectCell(CellViewModel cell, Button button)
     {
+        if (_isFormulaEditing && _formulaEditTargetCell != null && cell != _formulaEditTargetCell)
+        {
+            InsertCellReferenceIntoFormula(cell);
+            return;
+        }
+
         // Deselect previous cell
         if (_selectedCell != null)
         {
@@ -255,14 +365,19 @@ public sealed partial class MainWindow : Page
         // Reset all button backgrounds
         foreach (var child in SpreadsheetGrid.Children.OfType<Button>())
         {
-            child.Background = new SolidColorBrush(Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF));
+            if (child.Tag is CellViewModel vm)
+            {
+                ApplyCellStyling(child, vm);
+            }
         }
         
         // Select new cell
         _selectedCell = cell;
         _selectedButton = button;
         cell.IsSelected = true;
-        button.Background = new SolidColorBrush(Color.FromArgb(0x4A, 0x00, 0xD4, 0xFF));
+        ApplyCellStyling(button, cell);
+        button.BorderBrush = new SolidColorBrush(Colors.DodgerBlue);
+        button.BorderThickness = new Thickness(2);
         
         // Update inspector
         _isUpdatingCell = true;
@@ -276,6 +391,14 @@ public sealed partial class MainWindow : Page
         AutomationModeBox.SelectedIndex = (int)cell.AutomationMode;
         
         _isUpdatingCell = false;
+        if (!_isFormulaEditing)
+        {
+            ClearFormulaHighlights();
+        }
+        else
+        {
+            UpdateParameterHints();
+        }
     }
 
     private void StartDirectEdit(CellViewModel cell, Button button)
@@ -403,6 +526,7 @@ public sealed partial class MainWindow : Page
         
         // Show intellisense if typing function name
         ShowFormulaIntellisense();
+        UpdateParameterHints();
     }
 
     private void ShowFormulaIntellisense()
@@ -413,6 +537,7 @@ public sealed partial class MainWindow : Page
         if (string.IsNullOrWhiteSpace(text) || !text.StartsWith("=") || text.Length < 2)
         {
             FunctionAutocompletePopup.IsOpen = false;
+            ParameterHintPopup.IsOpen = false;
             return;
         }
         
@@ -449,6 +574,103 @@ public sealed partial class MainWindow : Page
         {
             FunctionAutocompletePopup.IsOpen = false;
         }
+    }
+
+    private (string FunctionName, int ArgumentIndex) ParseFunctionContext(string text, int caretIndex)
+    {
+        if (string.IsNullOrWhiteSpace(text) || !text.StartsWith("="))
+        {
+            return (string.Empty, -1);
+        }
+
+        var body = text.Substring(1);
+        var parenIndex = body.IndexOf('(');
+        if (parenIndex < 0)
+        {
+            return (string.Empty, -1);
+        }
+
+        var functionName = body.Substring(0, parenIndex).Trim();
+        if (string.IsNullOrWhiteSpace(functionName))
+        {
+            return (string.Empty, -1);
+        }
+
+        var startIndex = parenIndex + 1;
+        var maxIndex = Math.Min(body.Length, Math.Max(0, caretIndex - 1));
+        if (maxIndex <= startIndex)
+        {
+            return (functionName, 0);
+        }
+
+        int depth = 0;
+        int argumentIndex = 0;
+        for (int i = startIndex; i < maxIndex; i++)
+        {
+            var ch = body[i];
+            if (ch == '(')
+            {
+                depth++;
+            }
+            else if (ch == ')')
+            {
+                if (depth == 0)
+                {
+                    break;
+                }
+                depth--;
+            }
+            else if (ch == ',' && depth == 0)
+            {
+                argumentIndex++;
+            }
+        }
+
+        return (functionName, Math.Max(0, argumentIndex));
+    }
+
+    private void UpdateParameterHints()
+    {
+        if (!_isFormulaEditing)
+        {
+            ParameterHintPopup.IsOpen = false;
+            return;
+        }
+
+        var text = CellFormulaBox.Text ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(text) || !text.StartsWith("="))
+        {
+            ParameterHintPopup.IsOpen = false;
+            return;
+        }
+
+        var caret = CellFormulaBox.SelectionStart;
+        var context = ParseFunctionContext(text, caret);
+        if (string.IsNullOrWhiteSpace(context.FunctionName) || !_functionMap.TryGetValue(context.FunctionName, out var descriptor))
+        {
+            ParameterHintPopup.IsOpen = false;
+            return;
+        }
+
+        _parameterHints.Clear();
+        for (int i = 0; i < descriptor.Parameters.Count; i++)
+        {
+            _parameterHints.Add(ParameterHintItem.From(descriptor.Parameters[i], i == context.ArgumentIndex));
+        }
+
+        ParameterHintList.ItemsSource = null;
+        ParameterHintList.ItemsSource = _parameterHints;
+
+        ParameterHintFunctionName.Text = descriptor.Name;
+        ParameterHintDescription.Text = context.ArgumentIndex >= 0 && context.ArgumentIndex < descriptor.Parameters.Count
+            ? descriptor.Parameters[context.ArgumentIndex].Description
+            : descriptor.Description;
+
+        var transform = CellFormulaBox.TransformToVisual(this);
+        var point = transform.TransformPoint(new Point(0, CellFormulaBox.ActualHeight));
+        ParameterHintPopup.HorizontalOffset = point.X;
+        ParameterHintPopup.VerticalOffset = point.Y + 4;
+        ParameterHintPopup.IsOpen = _parameterHints.Count > 0;
     }
 
     private void CellFormulaBox_KeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
@@ -498,6 +720,91 @@ public sealed partial class MainWindow : Page
         }
     }
 
+    private void CellFormulaBox_GotFocus(object sender, RoutedEventArgs e)
+    {
+        _isFormulaEditing = true;
+        _formulaEditTargetCell = _selectedCell;
+        ClearFormulaHighlights();
+        UpdateParameterHints();
+    }
+
+    private void CellFormulaBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        _isFormulaEditing = false;
+        _formulaEditTargetCell = null;
+        ParameterHintPopup.IsOpen = false;
+        ClearFormulaHighlights();
+    }
+
+    private void InsertCellReferenceIntoFormula(CellViewModel cell)
+    {
+        if (_formulaEditTargetCell == null)
+        {
+            return;
+        }
+
+        var text = CellFormulaBox.Text ?? string.Empty;
+        var caret = CellFormulaBox.SelectionStart;
+        var reference = BuildCellReferenceString(cell, _formulaEditTargetCell);
+
+        if (caret > 0 && caret <= text.Length)
+        {
+            var previous = text[caret - 1];
+            if (previous != '(' && previous != ',' && previous != '=')
+            {
+                reference = "," + reference;
+            }
+        }
+
+        CellFormulaBox.Text = text.Insert(caret, reference);
+        CellFormulaBox.SelectionStart = caret + reference.Length;
+        _selectedCell!.Formula = CellFormulaBox.Text;
+        HighlightFormulaCell(cell);
+        UpdateParameterHints();
+    }
+
+    private static string BuildCellReferenceString(CellViewModel cell, CellViewModel target)
+    {
+        if (cell.Sheet == target.Sheet)
+        {
+            var columnName = CellAddress.ColumnIndexToName(cell.Column);
+            return $"{columnName}{cell.Row + 1}";
+        }
+
+        return cell.Address.ToString();
+    }
+
+    private void HighlightFormulaCell(CellViewModel cell)
+    {
+        if (_formulaHighlights.Any(h => h.Cell == cell))
+        {
+            return;
+        }
+
+        _formulaHighlights.Add((cell, cell.VisualState));
+        cell.VisualState = CellVisualState.InDependencyChain;
+        var button = GetButtonForCell(cell);
+        if (button != null)
+        {
+            ApplyCellStyling(button, cell);
+        }
+    }
+
+    private void ClearFormulaHighlights()
+    {
+        foreach (var (cell, previous) in _formulaHighlights)
+        {
+            cell.VisualState = previous;
+            var button = GetButtonForCell(cell);
+            if (button != null)
+            {
+                ApplyCellStyling(button, cell);
+            }
+        }
+
+        _formulaHighlights.Clear();
+    }
+
     private void InsertFunctionSuggestion(FunctionSuggestion suggestion)
     {
         // Replace the typed text with the full function name and opening paren
@@ -505,6 +812,92 @@ public sealed partial class MainWindow : Page
         CellFormulaBox.SelectionStart = CellFormulaBox.Text.Length;
         FunctionAutocompletePopup.IsOpen = false;
         CellFormulaBox.Focus(FocusState.Programmatic);
+    }
+
+    private void LeftSplitter_PointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        _isLeftSplitterDragging = true;
+        _leftSplitterStart = e.GetCurrentPoint(MainLayoutGrid).Position;
+        _leftInitialWidth = FunctionsColumn.ActualWidth > 0 ? FunctionsColumn.ActualWidth : ViewModel.Settings.FunctionsPanelWidth;
+        (sender as UIElement)?.CapturePointer(e.Pointer);
+    }
+
+    private void LeftSplitter_PointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_isLeftSplitterDragging)
+        {
+            return;
+        }
+
+        var point = e.GetCurrentPoint(MainLayoutGrid).Position;
+        var delta = point.X - _leftSplitterStart.X;
+        var newWidth = Math.Max(180, _leftInitialWidth + delta);
+        FunctionsColumn.Width = new GridLength(newWidth);
+    }
+
+    private void LeftSplitter_PointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_isLeftSplitterDragging)
+        {
+            return;
+        }
+
+        _isLeftSplitterDragging = false;
+        (sender as UIElement)?.ReleasePointerCaptures();
+        var finalWidth = Math.Max(180, FunctionsColumn.ActualWidth);
+        FunctionsColumn.Width = new GridLength(finalWidth);
+        ViewModel.Settings.FunctionsPanelWidth = finalWidth;
+    }
+
+    private void RightSplitter_PointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        _isRightSplitterDragging = true;
+        _rightSplitterStart = e.GetCurrentPoint(MainLayoutGrid).Position;
+        _rightInitialWidth = InspectorColumn.ActualWidth > 0 ? InspectorColumn.ActualWidth : ViewModel.Settings.InspectorPanelWidth;
+        (sender as UIElement)?.CapturePointer(e.Pointer);
+    }
+
+    private void RightSplitter_PointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_isRightSplitterDragging)
+        {
+            return;
+        }
+
+        var point = e.GetCurrentPoint(MainLayoutGrid).Position;
+        var delta = _rightSplitterStart.X - point.X;
+        var newWidth = Math.Max(220, _rightInitialWidth + delta);
+        InspectorColumn.Width = new GridLength(newWidth);
+    }
+
+    private void RightSplitter_PointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_isRightSplitterDragging)
+        {
+            return;
+        }
+
+        _isRightSplitterDragging = false;
+        (sender as UIElement)?.ReleasePointerCaptures();
+        var finalWidth = Math.Max(220, InspectorColumn.ActualWidth);
+        InspectorColumn.Width = new GridLength(finalWidth);
+        ViewModel.Settings.InspectorPanelWidth = finalWidth;
+    }
+
+    private void Splitter_PointerEntered(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is Border border)
+        {
+            border.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(0x55, 0xFF, 0xFF, 0xFF));
+        }
+    }
+
+    private void Splitter_PointerExited(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is Border border && !_isLeftSplitterDragging && !_isRightSplitterDragging)
+        {
+            border.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF));
+        }
     }
 
     private void CellNotes_Changed(object sender, TextChangedEventArgs e)
@@ -523,13 +916,60 @@ public sealed partial class MainWindow : Page
     {
         if (_selectedCell != null && ViewModel.SelectedSheet != null)
         {
-            await _selectedCell.EvaluateAsync();
-            
-            // Refresh the cell display
-            if (SheetTabs.SelectedItem is TabViewItem tab && tab.Tag is SheetViewModel sheet)
+            var result = await _selectedCell.EvaluateAsync();
+            if (result != null)
             {
-                BuildSpreadsheetGrid(sheet);
+                await HandleEvaluationResultAsync(_selectedCell, result);
             }
+        }
+    }
+
+    private async Task HandleEvaluationResultAsync(CellViewModel cell, FunctionExecutionResult result)
+    {
+        var sheet = ViewModel.SelectedSheet;
+        bool proceed = true;
+
+        if (result.HasSpill && sheet != null)
+        {
+            var rows = result.SpillRange!.GetLength(0);
+            var cols = result.SpillRange!.GetLength(1);
+            var existing = sheet.GetCellsInRange(cell, rows, cols)
+                .Where(c => c != cell && (!string.IsNullOrWhiteSpace(c.RawValue) || c.HasFormula))
+                .ToList();
+
+            if (existing.Count > 0)
+            {
+                var dialog = new ContentDialog
+                {
+                    Title = "Confirm Spill Operation",
+                    Content = $"This formula will spill into a {rows}×{cols} range and shift {existing.Count} populated cell(s). Continue?",
+                    PrimaryButtonText = "Spill",
+                    CloseButtonText = "Cancel",
+                    DefaultButton = ContentDialogButton.Primary,
+                    XamlRoot = Content.XamlRoot
+                };
+
+                var decision = await dialog.ShowAsync();
+                proceed = decision == ContentDialogResult.Primary;
+            }
+        }
+
+        if (!proceed)
+        {
+            return;
+        }
+
+        cell.ApplyEvaluationResult(result);
+
+        if (result.HasSpill && sheet != null)
+        {
+            var affected = sheet.ApplySpill(cell, result.SpillRange!);
+            ViewModel.StatusMessage = $"Spilled into {affected.Count + 1} cell(s) from {cell.DisplayLabel}";
+        }
+
+        if (sheet != null)
+        {
+            BuildSpreadsheetGrid(sheet);
         }
     }
 
@@ -958,6 +1398,93 @@ public sealed partial class MainWindow : Page
         BuildSpreadsheetGrid(ViewModel.SelectedSheet);
         ViewModel.StatusMessage = $"Deleted column {GetColumnName(colIndex)}";
     }
+
+    private async void FormatCell_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedCell == null)
+        {
+            return;
+        }
+
+        var dialog = new FormatCellDialog(_selectedCell.Format)
+        {
+            XamlRoot = Content.XamlRoot
+        };
+
+        var result = await dialog.ShowAsync();
+        if (result == ContentDialogResult.Primary)
+        {
+            _selectedCell.Format = dialog.SelectedFormat.Clone();
+            if (_selectedButton != null)
+            {
+                ApplyCellStyling(_selectedButton, _selectedCell);
+            }
+            ViewModel.StatusMessage = $"Updated format for {_selectedCell.DisplayLabel}";
+        }
+    }
+
+    private async void ViewHistory_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedCell == null)
+        {
+            return;
+        }
+
+        var dialog = new CellHistoryDialog(_selectedCell)
+        {
+            XamlRoot = Content.XamlRoot
+        };
+
+        await dialog.ShowAsync();
+    }
+
+    private async void ExtractFormula_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedCell == null || string.IsNullOrWhiteSpace(_selectedCell.Formula) || ViewModel.SelectedSheet == null)
+        {
+            ViewModel.StatusMessage = "No formula to extract.";
+            return;
+        }
+
+        var dialog = new ExtractFormulaDialog(_selectedCell.Address.ToString())
+        {
+            XamlRoot = Content.XamlRoot
+        };
+
+        var result = await dialog.ShowAsync();
+        if (result != ContentDialogResult.Primary)
+        {
+            return;
+        }
+
+        var targetAddress = dialog.TargetAddress;
+        if (!CellAddress.TryParse(targetAddress, ViewModel.SelectedSheet.Name, out var address))
+        {
+            ViewModel.StatusMessage = "Invalid destination address.";
+            return;
+        }
+
+        var targetSheet = ViewModel.GetSheet(address.SheetName) ?? ViewModel.SelectedSheet;
+        var destination = targetSheet.GetCell(address.Row, address.Column);
+        if (destination == null)
+        {
+            ViewModel.StatusMessage = "Destination cell not available.";
+            return;
+        }
+
+        destination.Formula = _selectedCell.Formula;
+        destination.AutomationMode = _selectedCell.AutomationMode;
+        targetSheet.UpdateCellDependencies(destination);
+
+        _selectedCell.Formula = string.Empty;
+        targetSheet.UpdateCellDependencies(_selectedCell);
+        ViewModel.StatusMessage = $"Extracted formula to {targetSheet.Name}!{CellAddress.ColumnIndexToName(address.Column)}{address.Row + 1}";
+
+        if (ViewModel.SelectedSheet != null)
+        {
+            BuildSpreadsheetGrid(ViewModel.SelectedSheet);
+        }
+    }
     
     private string GetColumnName(int index)
     {
@@ -993,5 +1520,25 @@ public sealed partial class MainWindow : Page
     {
         _pipeServer?.Dispose();
         _pipeServer = null;
+    }
+}
+
+public class ParameterHintItem
+{
+    public string Name { get; init; } = string.Empty;
+    public string Description { get; init; } = string.Empty;
+    public FontWeight Weight { get; init; } = FontWeights.Normal;
+    public Brush Brush { get; init; } = new SolidColorBrush(Colors.White);
+    public Visibility DescriptionVisibility => string.IsNullOrWhiteSpace(Description) ? Visibility.Collapsed : Visibility.Visible;
+
+    public static ParameterHintItem From(FunctionParameter parameter, bool isActive)
+    {
+        return new ParameterHintItem
+        {
+            Name = parameter.IsOptional ? $"{parameter.Name} (optional)" : parameter.Name,
+            Description = parameter.Description,
+            Weight = isActive ? FontWeights.SemiBold : FontWeights.Normal,
+            Brush = new SolidColorBrush(isActive ? Colors.DeepSkyBlue : Colors.White)
+        };
     }
 }

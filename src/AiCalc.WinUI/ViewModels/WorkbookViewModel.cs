@@ -227,7 +227,9 @@ public partial class WorkbookViewModel : BaseViewModel
                     Formula = cell.Formula,
                     Value = cell.Value,
                     AutomationMode = cell.AutomationMode,
-                    Notes = cell.Notes
+                    Notes = cell.Notes,
+                    Format = cell.Format.Clone(),
+                    History = new ObservableCollection<CellHistoryEntry>(cell.History.Select(h => h.Clone()))
                 });
             }
 
@@ -259,10 +261,10 @@ public partial class WorkbookViewModel : BaseViewModel
                     continue;
                 }
 
-                cell.Formula = cellDef.Formula;
-                cell.AutomationMode = cellDef.AutomationMode;
-                cell.Notes = cellDef.Notes;
-                cell.Value = cellDef.Value;
+                using (cell.SuppressHistory())
+                {
+                    cell.LoadFromDefinition(cellDef);
+                }
             }
 
             Sheets.Add(sheetVm);
