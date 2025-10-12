@@ -269,18 +269,49 @@ public sealed partial class MainWindow : Page
 
     private void ApplyCellStyling(Button button, CellViewModel cellVm, TextBlock? valueText = null)
     {
-        var backgroundColor = ParseColor(cellVm.FormatBackground);
-        button.Background = new SolidColorBrush(backgroundColor);
+        var isDefaultBackground = string.IsNullOrWhiteSpace(cellVm.FormatBackground) ||
+            string.Equals(cellVm.FormatBackground, CellFormat.DefaultBackgroundColor, StringComparison.OrdinalIgnoreCase);
+        var isDefaultBorder = string.IsNullOrWhiteSpace(cellVm.FormatBorder) ||
+            string.Equals(cellVm.FormatBorder, CellFormat.DefaultBorderColor, StringComparison.OrdinalIgnoreCase);
+        var isDefaultForeground = string.IsNullOrWhiteSpace(cellVm.FormatForeground) ||
+            string.Equals(cellVm.FormatForeground, CellFormat.DefaultForegroundColor, StringComparison.OrdinalIgnoreCase);
 
-        var borderColor = ParseColor(cellVm.FormatBorder);
-        button.BorderBrush = new SolidColorBrush(borderColor);
+        if (isDefaultBackground && Application.Current.Resources.TryGetValue("CellThemeBackgroundBrush", out var bgBrush) && bgBrush is SolidColorBrush themeBackground)
+        {
+            button.Background = themeBackground;
+        }
+        else
+        {
+            var backgroundColor = ParseColor(cellVm.FormatBackground);
+            button.Background = new SolidColorBrush(backgroundColor);
+        }
+
+        if (isDefaultBorder && Application.Current.Resources.TryGetValue("CellThemeBorderBrush", out var borderBrush) && borderBrush is SolidColorBrush themeBorder)
+        {
+            button.BorderBrush = themeBorder;
+        }
+        else
+        {
+            var borderColor = ParseColor(cellVm.FormatBorder);
+            button.BorderBrush = new SolidColorBrush(borderColor);
+        }
+
         button.BorderThickness = new Thickness(cellVm.Format.BorderThickness);
 
         valueText ??= (button.Content as StackPanel)?.Children.OfType<TextBlock>().FirstOrDefault();
         if (valueText != null)
         {
             valueText.Text = cellVm.DisplayValue;
-            valueText.Foreground = new SolidColorBrush(ParseColor(cellVm.FormatForeground));
+
+            if (isDefaultForeground && Application.Current.Resources.TryGetValue("CellThemeForegroundBrush", out var fgBrush) && fgBrush is SolidColorBrush themeForeground)
+            {
+                valueText.Foreground = themeForeground;
+            }
+            else
+            {
+                valueText.Foreground = new SolidColorBrush(ParseColor(cellVm.FormatForeground));
+            }
+
             valueText.FontSize = cellVm.Format.FontSize;
             valueText.FontWeight = cellVm.Format.IsBold ? FontWeights.SemiBold : FontWeights.Normal;
             valueText.FontStyle = cellVm.Format.IsItalic ? FontStyle.Italic : FontStyle.Normal;
@@ -289,15 +320,24 @@ public sealed partial class MainWindow : Page
         switch (cellVm.VisualState)
         {
             case CellVisualState.InDependencyChain:
-                button.BorderBrush = new SolidColorBrush(Colors.DeepSkyBlue);
+                if (Application.Current.Resources.TryGetValue("CellStateInDependencyChainBrush", out var depBrush))
+                    button.BorderBrush = depBrush as SolidColorBrush ?? new SolidColorBrush(Colors.DeepSkyBlue);
+                else
+                    button.BorderBrush = new SolidColorBrush(Colors.DeepSkyBlue);
                 button.BorderThickness = new Thickness(2);
                 break;
             case CellVisualState.Error:
-                button.BorderBrush = new SolidColorBrush(Colors.OrangeRed);
+                if (Application.Current.Resources.TryGetValue("CellStateErrorBrush", out var errBrush))
+                    button.BorderBrush = errBrush as SolidColorBrush ?? new SolidColorBrush(Colors.OrangeRed);
+                else
+                    button.BorderBrush = new SolidColorBrush(Colors.OrangeRed);
                 button.BorderThickness = new Thickness(2);
                 break;
             case CellVisualState.JustUpdated:
-                button.BorderBrush = new SolidColorBrush(Colors.LimeGreen);
+                if (Application.Current.Resources.TryGetValue("CellStateJustUpdatedBrush", out var updBrush))
+                    button.BorderBrush = updBrush as SolidColorBrush ?? new SolidColorBrush(Colors.LimeGreen);
+                else
+                    button.BorderBrush = new SolidColorBrush(Colors.LimeGreen);
                 button.BorderThickness = new Thickness(2);
                 break;
         }
@@ -439,6 +479,14 @@ public sealed partial class MainWindow : Page
         }
     }
 
+    private void CellEditBox_GotFocus(object sender, RoutedEventArgs e)
+    {
+        if (_isNavigatingBetweenCells)
+        {
+            _isNavigatingBetweenCells = false;
+        }
+    }
+
     private void CellEditBox_KeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
     {
         if (e.Key == Windows.System.VirtualKey.Enter)
@@ -446,39 +494,41 @@ public sealed partial class MainWindow : Page
             CommitCellEdit();
             e.Handled = true;
         }
-        else if (e.Key == Windows.System.VirtualKey.Tab)
+            else if (e.Key == Windows.System.VirtualKey.Tab)
         {
-            // Set flag to prevent LostFocus from committing
+            // Set flag to prevent LostFocus from committing until new edit box is ready
             _isNavigatingBetweenCells = true;
             
-            // Commit current edit and move to next cell
+            // Commit current edit (saves value but keeps edit box open due to flag)
             CommitCellEdit();
             
             // Move to next cell (right if Tab, left if Shift+Tab)
             var shift = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(Windows.System.VirtualKey.Shift).HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
             var newCell = MoveSelection(shift ? -1 : 1, 0);
             
-            // Start edit mode on the new cell
+            // Hide current edit box before reusing it
+            CellEditBox.Visibility = Visibility.Collapsed;
+            CellEditBox.Tag = null;
+            
             if (newCell != null)
             {
                 var newButton = GetButtonForCell(newCell);
                 if (newButton != null)
                 {
-                    // Use dispatcher to ensure focus is set after control is visible
+                    // Defer to dispatcher so focus changes settle before showing new overlay
                     DispatcherQueue.TryEnqueue(() =>
                     {
                         StartDirectEdit(newCell, newButton);
-                        _isNavigatingBetweenCells = false;
                     });
                 }
                 else
                 {
-                    _isNavigatingBetweenCells = false;
+                    DispatcherQueue.TryEnqueue(() => _isNavigatingBetweenCells = false);
                 }
             }
             else
             {
-                _isNavigatingBetweenCells = false;
+                DispatcherQueue.TryEnqueue(() => _isNavigatingBetweenCells = false);
             }
             
             e.Handled = true;
@@ -495,12 +545,26 @@ public sealed partial class MainWindow : Page
         if (CellEditBox.Tag is CellViewModel cell)
         {
             cell.RawValue = CellEditBox.Text;
-            CellEditBox.Visibility = Visibility.Collapsed;
             
-            // Refresh the grid
-            if (ViewModel.SelectedSheet != null)
+            // Only close edit box and refresh if not navigating between cells
+            if (!_isNavigatingBetweenCells)
             {
-                BuildSpreadsheetGrid(ViewModel.SelectedSheet);
+                CellEditBox.Visibility = Visibility.Collapsed;
+                CellEditBox.Tag = null;
+                
+                if (ViewModel.SelectedSheet != null)
+                {
+                    BuildSpreadsheetGrid(ViewModel.SelectedSheet);
+                }
+            }
+            else
+            {
+                // During Tab navigation, just update the button text without closing edit box yet
+                var button = GetButtonForCell(cell);
+                if (button != null)
+                {
+                    ApplyCellStyling(button, cell);
+                }
             }
             
             // Update inspector if this cell is selected

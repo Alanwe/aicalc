@@ -153,6 +153,7 @@
                                      Padding="8"
                                      FontSize="13"
                                      TextWrapping="NoWrap"
+                                     GotFocus="CellEditBox_GotFocus"
                                      LostFocus="CellEditBox_LostFocus"
                                      KeyDown="CellEditBox_KeyDown"/>
                         </Grid>

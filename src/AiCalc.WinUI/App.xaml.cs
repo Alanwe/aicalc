@@ -82,6 +82,9 @@ public partial class App : Application
     public static void ApplyCellStateTheme(CellVisualTheme theme)
     {
         Color justUpdated, calculating, stale, manualUpdate, error, dependency;
+        Color cellBackground;
+        Color cellForeground;
+        Color cellBorder;
 
         switch (theme)
         {
@@ -92,6 +95,9 @@ public partial class App : Application
                 manualUpdate = Color.FromArgb(0xFF, 0xFF, 0xA5, 0x00);   // Orange
                 error = Color.FromArgb(0xFF, 0xDC, 0x14, 0x3C);          // Crimson
                 dependency = Color.FromArgb(0xFF, 0xFF, 0xD7, 0x00);     // Gold
+                cellBackground = Color.FromArgb(0xFF, 0xF7, 0xFA, 0xFF);
+                cellForeground = Color.FromArgb(0xFF, 0x20, 0x2A, 0x36);
+                cellBorder = Color.FromArgb(0xFF, 0xC7, 0xD3, 0xE3);
                 break;
 
             case CellVisualTheme.Dark:
@@ -101,6 +107,9 @@ public partial class App : Application
                 manualUpdate = Color.FromArgb(0xFF, 0xFF, 0x8C, 0x00);   // DarkOrange
                 error = Color.FromArgb(0xFF, 0xFF, 0x44, 0x44);          // Bright Red
                 dependency = Color.FromArgb(0xFF, 0xFF, 0xD7, 0x00);     // Gold
+                cellBackground = Color.FromArgb(0xFF, 0x23, 0x28, 0x31);
+                cellForeground = Color.FromArgb(0xFF, 0xF5, 0xF7, 0xFA);
+                cellBorder = Color.FromArgb(0xFF, 0x43, 0x4B, 0x55);
                 break;
 
             case CellVisualTheme.HighContrast:
@@ -110,6 +119,9 @@ public partial class App : Application
                 manualUpdate = Color.FromArgb(0xFF, 0xFF, 0x66, 0x00);   // Bright Orange
                 error = Color.FromArgb(0xFF, 0xFF, 0x00, 0x00);          // Pure Red
                 dependency = Color.FromArgb(0xFF, 0xFF, 0xFF, 0x00);     // Yellow
+                cellBackground = Color.FromArgb(0xFF, 0x00, 0x00, 0x00);
+                cellForeground = Color.FromArgb(0xFF, 0xFF, 0xFF, 0xFF);
+                cellBorder = Color.FromArgb(0xFF, 0xFF, 0xFF, 0x00);
                 break;
 
             case CellVisualTheme.Custom:
@@ -121,6 +133,9 @@ public partial class App : Application
                 manualUpdate = Color.FromArgb(0xFF, 0xFF, 0xA5, 0x00);
                 error = Color.FromArgb(0xFF, 0xDC, 0x14, 0x3C);
                 dependency = Color.FromArgb(0xFF, 0xFF, 0xD7, 0x00);
+                cellBackground = Color.FromArgb(0xFF, 0xF7, 0xFA, 0xFF);
+                cellForeground = Color.FromArgb(0xFF, 0x20, 0x2A, 0x36);
+                cellBorder = Color.FromArgb(0xFF, 0xC7, 0xD3, 0xE3);
                 break;
         }
 
@@ -131,6 +146,10 @@ public partial class App : Application
         Current.Resources["CellStateManualUpdateBrush"] = new SolidColorBrush(manualUpdate);
         Current.Resources["CellStateErrorBrush"] = new SolidColorBrush(error);
         Current.Resources["CellStateInDependencyChainBrush"] = new SolidColorBrush(dependency);
+        Current.Resources["CellStateNormalBrush"] = new SolidColorBrush(cellBackground);
+        Current.Resources["CellThemeBackgroundBrush"] = new SolidColorBrush(cellBackground);
+        Current.Resources["CellThemeForegroundBrush"] = new SolidColorBrush(cellForeground);
+        Current.Resources["CellThemeBorderBrush"] = new SolidColorBrush(cellBorder);
     }
 
     /// <summary>

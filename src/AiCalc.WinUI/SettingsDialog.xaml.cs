@@ -143,15 +143,12 @@ public sealed partial class SettingsDialog : ContentDialog
             // Apply theme to the application resources
             App.ApplyCellStateTheme(theme);
             
-            // Force refresh the main window grid to show theme changes immediately
+            // Force immediate refresh of the main window grid
             var mainWindow = App.MainWindow?.Content as MainWindow;
             if (mainWindow?.ViewModel?.SelectedSheet != null)
             {
-                // Use dispatcher to ensure UI is updated after theme resources are loaded
-                mainWindow.DispatcherQueue.TryEnqueue(() =>
-                {
-                    mainWindow.BuildSpreadsheetGrid(mainWindow.ViewModel.SelectedSheet);
-                });
+                // Rebuild grid immediately to show theme changes
+                mainWindow.BuildSpreadsheetGrid(mainWindow.ViewModel.SelectedSheet);
             }
         }
     }

@@ -12,6 +12,10 @@ public class CellFormat
     private const string DefaultForeground = "#FFFFFFFF";
     private const string DefaultBorder = "#44FFFFFF";
 
+    public static string DefaultBackgroundColor => DefaultBackground;
+    public static string DefaultForegroundColor => DefaultForeground;
+    public static string DefaultBorderColor => DefaultBorder;
+
     public string Background { get; set; } = DefaultBackground;
 
     public string Foreground { get; set; } = DefaultForeground;
