@@ -223,7 +223,14 @@
                             </StackPanel>
                             
                             <StackPanel Spacing="6">
-                                <TextBlock Text="Formula" Foreground="#CCFFFFFF" FontSize="13" FontWeight="SemiBold" />
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <TextBlock Text="Formula" Foreground="#CCFFFFFF" FontSize="13" FontWeight="SemiBold" />
+                                    <TextBlock x:Name="FormulaSyntaxInfo" 
+                                               Foreground="#88FFFFFF" 
+                                               FontSize="11" 
+                                               VerticalAlignment="Center"
+                                               Visibility="Collapsed" />
+                                </StackPanel>
                                 <Grid>
                                     <TextBox x:Name="CellFormulaBox" 
                                              PlaceholderText="=SUM(A1,A2)"

@@ -1,6 +1,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
 using AiCalc.Models;
+using AiCalc.Services;
 using AiCalc.Services.AI;
 using System;
 using Windows.UI;
@@ -17,6 +18,11 @@ public partial class App : Application
     /// Global AI Service Registry for managing AI connections
     /// </summary>
     public static AIServiceRegistry AIServices { get; private set; } = new AIServiceRegistry();
+
+    /// <summary>
+    /// User preferences service (Phase 5)
+    /// </summary>
+    public static UserPreferencesService PreferencesService { get; private set; } = new UserPreferencesService();
 
     public App()
     {
@@ -50,7 +56,10 @@ public partial class App : Application
         {
             base.OnLaunched(args);
             
-            // Apply default theme now that resources are initialized
+            // Load user preferences (Phase 5)
+            var prefs = PreferencesService.LoadPreferences();
+            
+            // Apply cell state theme
             ApplyCellStateTheme(CellVisualTheme.Light);
             
             if (_window is null)
@@ -62,8 +71,24 @@ public partial class App : Application
                 _window.Content = new MainWindow();
                 MainWindow = _window;
                 
-                // Apply application theme (default to System)
-                ApplyApplicationTheme(AppTheme.System);
+                // Apply saved application theme
+                var appTheme = prefs.Theme switch
+                {
+                    "Light" => AppTheme.Light,
+                    "Dark" => AppTheme.Dark,
+                    _ => AppTheme.System
+                };
+                ApplyApplicationTheme(appTheme);
+                
+                // Restore window size
+                if (prefs.WindowWidth > 0 && prefs.WindowHeight > 0)
+                {
+                    var appWindow = _window.AppWindow;
+                    appWindow.Resize(new Windows.Graphics.SizeInt32((int)prefs.WindowWidth, (int)prefs.WindowHeight));
+                }
+                
+                // Handle window closing to save preferences
+                _window.Closed += OnWindowClosed;
             }
 
             _window.Activate();
@@ -73,6 +98,22 @@ public partial class App : Application
             System.IO.File.WriteAllText(@"C:\Projects\aicalc\onlaunched_crash.log", 
                 $"OnLaunched Exception:\n{ex.Message}\n\n{ex.StackTrace}\n\nInner: {ex.InnerException?.Message}\n{ex.InnerException?.StackTrace}");
             throw;
+        }
+    }
+
+    private void OnWindowClosed(object sender, WindowEventArgs args)
+    {
+        try
+        {
+            // Save preferences on close (Phase 5)
+            if (_window?.Content is MainWindow mainWindow)
+            {
+                mainWindow.SavePreferences();
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Error saving preferences on close: {ex.Message}");
         }
     }
 

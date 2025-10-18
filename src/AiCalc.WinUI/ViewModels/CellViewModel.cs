@@ -193,6 +193,21 @@ public partial class CellViewModel : ObservableObject
         }
 
         OnPropertyChanged(nameof(History));
+
+        // Record for undo/redo (Phase 5)
+        if (valueChanged || formulaChanged)
+        {
+            var action = CellChangeAction.ForValueChange(
+                Address,
+                oldValue.DisplayValue,
+                newValue.DisplayValue,
+                oldFormula,
+                newFormula,
+                AutomationMode,
+                AutomationMode,
+                reason);
+            _workbook.RecordCellChange(action);
+        }
         OnPropertyChanged(nameof(HasHistory));
     }
 
@@ -331,7 +346,7 @@ public partial class CellViewModel : ObservableObject
         }
         finally
         {
-            _workbook.StatusMessage = null;
+            _workbook.StatusMessage = "Ready";
             _workbook.IsBusy = false;
             IsCalculating = false;
             if (!IsStale && VisualState != CellVisualState.Error)

@@ -57,18 +57,12 @@ public sealed partial class MainWindow : Page
         LoadFunctionsList();
         InitializeFunctionSuggestions();
         RefreshSheetTabs();
-        ApplyStoredPanelWidths();
+        LoadPreferences();  // Load user preferences (Phase 5)
 
         ViewModel.Settings.Connections.CollectionChanged += SettingsConnections_CollectionChanged;
         
         // Start Python SDK pipe server
         StartPipeServer();
-    }
-
-    private void ApplyStoredPanelWidths()
-    {
-        FunctionsColumn.Width = new GridLength(Math.Max(180, ViewModel.Settings.FunctionsPanelWidth));
-        InspectorColumn.Width = new GridLength(Math.Max(220, ViewModel.Settings.InspectorPanelWidth));
     }
 
     private void SettingsConnections_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -860,6 +854,36 @@ public sealed partial class MainWindow : Page
         // Show intellisense if typing function name
         ShowFormulaIntellisense();
         UpdateParameterHints();
+        
+        // Update syntax highlighting info (Phase 5)
+        UpdateFormulaSyntaxInfo();
+    }
+
+    private void UpdateFormulaSyntaxInfo()
+    {
+        var text = CellFormulaBox.Text;
+        if (string.IsNullOrWhiteSpace(text) || !text.StartsWith("="))
+        {
+            FormulaSyntaxInfo.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var tokens = FormulaSyntaxHighlighter.Tokenize(text);
+        var funcCount = tokens.Count(t => t.Type == FormulaTokenType.Function);
+        var cellRefCount = tokens.Count(t => t.Type == FormulaTokenType.CellReference);
+        
+        if (funcCount > 0 || cellRefCount > 0)
+        {
+            var parts = new List<string>();
+            if (funcCount > 0) parts.Add($"{funcCount} function{(funcCount > 1 ? "s" : "")}");
+            if (cellRefCount > 0) parts.Add($"{cellRefCount} cell ref{(cellRefCount > 1 ? "s" : "")}");
+            FormulaSyntaxInfo.Text = $"💡 {string.Join(", ", parts)}";
+            FormulaSyntaxInfo.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            FormulaSyntaxInfo.Visibility = Visibility.Collapsed;
+        }
     }
 
     private void ShowFormulaIntellisense()
@@ -1453,6 +1477,30 @@ public sealed partial class MainWindow : Page
         var ctrl = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(Windows.System.VirtualKey.Control).HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
         var shift = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(Windows.System.VirtualKey.Shift).HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
         
+        // Ctrl+Z: Undo (Phase 5)
+        if (ctrl && e.Key == Windows.System.VirtualKey.Z && !shift)
+        {
+            if (ViewModel.UndoCommand.CanExecute(null))
+            {
+                ViewModel.UndoCommand.Execute(null);
+                e.Handled = true;
+                RefreshCurrentCell();
+            }
+            return;
+        }
+        
+        // Ctrl+Y or Ctrl+Shift+Z: Redo (Phase 5)
+        if (ctrl && (e.Key == Windows.System.VirtualKey.Y || (e.Key == Windows.System.VirtualKey.Z && shift)))
+        {
+            if (ViewModel.RedoCommand.CanExecute(null))
+            {
+                ViewModel.RedoCommand.Execute(null);
+                e.Handled = true;
+                RefreshCurrentCell();
+            }
+            return;
+        }
+        
         // F9: Recalculate all (skip Manual cells per Task 10)
         if (e.Key == Windows.System.VirtualKey.F9)
         {
@@ -2012,6 +2060,102 @@ public sealed partial class MainWindow : Page
     {
         _pipeServer?.Dispose();
         _pipeServer = null;
+    }
+
+    /// <summary>
+    /// Save user preferences on window close (Phase 5)
+    /// </summary>
+    public void SavePreferences()
+    {
+        try
+        {
+            var prefs = App.PreferencesService.LoadPreferences();
+            
+            // Save panel states
+            prefs.FunctionsPanelWidth = FunctionsColumn.ActualWidth;
+            prefs.InspectorPanelWidth = InspectorColumn.ActualWidth;
+            prefs.FunctionsPanelVisible = _functionsVisible;
+            prefs.InspectorPanelVisible = _inspectorVisible;
+            
+            // Save window size
+            if (App.MainWindow != null)
+            {
+                var appWindow = App.MainWindow.AppWindow;
+                prefs.WindowWidth = appWindow.Size.Width;
+                prefs.WindowHeight = appWindow.Size.Height;
+            }
+            
+            // Save theme
+            if (App.MainWindow?.Content is FrameworkElement rootElement)
+            {
+                prefs.Theme = rootElement.RequestedTheme switch
+                {
+                    ElementTheme.Light => "Light",
+                    ElementTheme.Dark => "Dark",
+                    _ => "System"
+                };
+            }
+            
+            App.PreferencesService.SavePreferences(prefs);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Error saving preferences: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Load and apply user preferences on startup (Phase 5)
+    /// </summary>
+    public void LoadPreferences()
+    {
+        try
+        {
+            var prefs = App.PreferencesService.LoadPreferences();
+            
+            // Apply panel widths
+            if (prefs.FunctionsPanelWidth > 0)
+            {
+                FunctionsColumn.Width = new GridLength(prefs.FunctionsPanelWidth);
+            }
+            if (prefs.InspectorPanelWidth > 0)
+            {
+                InspectorColumn.Width = new GridLength(prefs.InspectorPanelWidth);
+            }
+            
+            // Apply panel visibility
+            _functionsVisible = prefs.FunctionsPanelVisible;
+            _inspectorVisible = prefs.InspectorPanelVisible;
+            
+            if (!_functionsVisible)
+            {
+                FunctionsColumn.Width = new GridLength(0);
+            }
+            if (!_inspectorVisible)
+            {
+                InspectorColumn.Width = new GridLength(0);
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Error loading preferences: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Refresh the currently selected cell's display after undo/redo (Phase 5)
+    /// </summary>
+    private void RefreshCurrentCell()
+    {
+        if (_selectedCell != null)
+        {
+            CellFormulaBox.Text = _selectedCell.Formula ?? "";
+        }
+        
+        if (ViewModel.SelectedSheet != null)
+        {
+            BuildSpreadsheetGrid(ViewModel.SelectedSheet);
+        }
     }
 }
 

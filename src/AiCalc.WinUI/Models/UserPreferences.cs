@@ -1,0 +1,69 @@
+using System;
+
+namespace AiCalc.Models;
+
+/// <summary>
+/// User preferences for UI state and settings (Phase 5)
+/// </summary>
+public class UserPreferences
+{
+    /// <summary>
+    /// Application theme: Light, Dark, or System
+    /// </summary>
+    public string Theme { get; set; } = "System";
+
+    /// <summary>
+    /// Width of the Functions panel (0 = collapsed)
+    /// </summary>
+    public double FunctionsPanelWidth { get; set; } = 280;
+
+    /// <summary>
+    /// Width of the Inspector panel (0 = collapsed)
+    /// </summary>
+    public double InspectorPanelWidth { get; set; } = 320;
+
+    /// <summary>
+    /// Window width (saved on close)
+    /// </summary>
+    public double WindowWidth { get; set; } = 1400;
+
+    /// <summary>
+    /// Window height (saved on close)
+    /// </summary>
+    public double WindowHeight { get; set; } = 900;
+
+    /// <summary>
+    /// Whether Functions panel is visible
+    /// </summary>
+    public bool FunctionsPanelVisible { get; set; } = true;
+
+    /// <summary>
+    /// Whether Inspector panel is visible
+    /// </summary>
+    public bool InspectorPanelVisible { get; set; } = true;
+
+    /// <summary>
+    /// Enter key behavior: MoveDown, MoveRight, or Stay
+    /// </summary>
+    public string EnterKeyBehavior { get; set; } = "MoveDown";
+
+    /// <summary>
+    /// Enable formula autocomplete
+    /// </summary>
+    public bool EnableFormulaAutocomplete { get; set; } = true;
+
+    /// <summary>
+    /// Enable formula syntax highlighting
+    /// </summary>
+    public bool EnableFormulaSyntaxHighlighting { get; set; } = true;
+
+    /// <summary>
+    /// Recent workbook paths (up to 10)
+    /// </summary>
+    public string[] RecentWorkbooks { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Last opened workbook path
+    /// </summary>
+    public string? LastWorkbookPath { get; set; }
+}

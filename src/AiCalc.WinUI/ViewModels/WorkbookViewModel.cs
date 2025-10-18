@@ -24,6 +24,7 @@ public partial class WorkbookViewModel : BaseViewModel
 
     private readonly DependencyGraph _dependencyGraph;
     private readonly EvaluationEngine _evaluationEngine;
+    private readonly UndoRedoManager _undoRedoManager;
 
     public WorkbookViewModel()
     {
@@ -35,6 +36,12 @@ public partial class WorkbookViewModel : BaseViewModel
             FunctionRunner,
             Settings.MaxEvaluationThreads,
             Settings.DefaultEvaluationTimeoutSeconds);
+        _undoRedoManager = new UndoRedoManager(maxUndoLevels: 50);
+        _undoRedoManager.StacksChanged += (s, e) =>
+        {
+            UndoCommand.NotifyCanExecuteChanged();
+            RedoCommand.NotifyCanExecuteChanged();
+        };
         
         Sheets = new ObservableCollection<SheetViewModel>();
         AttachSettings(Settings);
@@ -49,6 +56,16 @@ public partial class WorkbookViewModel : BaseViewModel
     public DependencyGraph DependencyGraph => _dependencyGraph;
 
     public EvaluationEngine EvaluationEngine => _evaluationEngine;
+
+    public UndoRedoManager UndoRedoManager => _undoRedoManager;
+
+    /// <summary>
+    /// Record a cell change for undo/redo (Phase 5)
+    /// </summary>
+    public void RecordCellChange(CellChangeAction action)
+    {
+        _undoRedoManager.RecordAction(action);
+    }
 
     public ObservableCollection<SheetViewModel> Sheets { get; }
 
@@ -65,6 +82,9 @@ public partial class WorkbookViewModel : BaseViewModel
 
     [ObservableProperty]
     private CellViewModel? _activeCell;
+
+    [ObservableProperty]
+    private string _statusMessage = "Ready";
 
     public bool HasActiveCell => ActiveCell is not null;
 
@@ -134,15 +154,26 @@ public partial class WorkbookViewModel : BaseViewModel
 
         StatusMessage = $"Evaluating {cellsToEvaluate.Count} cells...";
         
-        var result = await _evaluationEngine.EvaluateAllAsync(cellsToEvaluate);
-        
-        if (result.Success)
+        try
         {
-            StatusMessage = $"✅ Evaluated {result.CellsEvaluated} cells in {result.Duration.TotalSeconds:F2}s";
+            var result = await _evaluationEngine.EvaluateAllAsync(cellsToEvaluate);
+            
+            if (result.CellsEvaluated > 0 && result.CellsFailed == 0)
+            {
+                StatusMessage = $"✅ Successfully evaluated {result.CellsEvaluated} cells in {result.Duration.TotalSeconds:F2}s";
+            }
+            else if (result.CellsEvaluated > 0 && result.CellsFailed > 0)
+            {
+                StatusMessage = $"⚠️ Evaluated {result.CellsEvaluated}/{cellsToEvaluate.Count} cells, {result.CellsFailed} errors";
+            }
+            else
+            {
+                StatusMessage = "Ready";
+            }
         }
-        else
+        catch (Exception ex)
         {
-            StatusMessage = $"⚠️ Evaluated {result.CellsEvaluated} cells, {result.CellsFailed} failed";
+            StatusMessage = $"❌ Evaluation error: {ex.Message}";
         }
     }
 
@@ -388,5 +419,83 @@ public partial class WorkbookViewModel : BaseViewModel
         {
             connection.ApiKey = CredentialService.Encrypt(connection.ApiKey);
         }
+    }
+
+    /// <summary>
+    /// Undo the last cell change (Phase 5)
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanUndo))]
+    private void Undo()
+    {
+        var action = _undoRedoManager.Undo();
+        if (action == null) return;
+
+        var cell = FindCell(action.Address);
+        if (cell == null) return;
+
+        ApplyActionReverse(cell, action);
+        StatusMessage = $"↶ Undo: {action.Description}";
+    }
+
+    private bool CanUndo() => _undoRedoManager.CanUndo;
+
+    /// <summary>
+    /// Redo the last undone cell change (Phase 5)
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanRedo))]
+    private void Redo()
+    {
+        var action = _undoRedoManager.Redo();
+        if (action == null) return;
+
+        var cell = FindCell(action.Address);
+        if (cell == null) return;
+
+        ApplyActionForward(cell, action);
+        StatusMessage = $"↷ Redo: {action.Description}";
+    }
+
+    private bool CanRedo() => _undoRedoManager.CanRedo;
+
+    private void ApplyActionReverse(CellViewModel cell, CellChangeAction action)
+    {
+        if (action.OldFormula != null || action.NewFormula != null)
+        {
+            cell.Formula = action.OldFormula ?? "";
+        }
+        
+        if (action.OldFormat != null || action.NewFormat != null)
+        {
+            cell.Format = action.OldFormat!;
+        }
+        
+        if (action.OldAutomationMode != action.NewAutomationMode)
+        {
+            cell.AutomationMode = action.OldAutomationMode;
+        }
+    }
+
+    private void ApplyActionForward(CellViewModel cell, CellChangeAction action)
+    {
+        if (action.OldFormula != null || action.NewFormula != null)
+        {
+            cell.Formula = action.NewFormula ?? "";
+        }
+        
+        if (action.OldFormat != null || action.NewFormat != null)
+        {
+            cell.Format = action.NewFormat!;
+        }
+        
+        if (action.OldAutomationMode != action.NewAutomationMode)
+        {
+            cell.AutomationMode = action.NewAutomationMode;
+        }
+    }
+
+    private CellViewModel? FindCell(CellAddress address)
+    {
+        var sheet = Sheets.FirstOrDefault(s => s.Name == address.SheetName);
+        return sheet?.Cells.FirstOrDefault(c => c.Address.Row == address.Row && c.Address.Column == address.Column);
     }
 }

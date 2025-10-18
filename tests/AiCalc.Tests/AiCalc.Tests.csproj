@@ -17,7 +17,7 @@
 
   <ItemGroup>
     <!-- Link to source files for testing (non-UI components) -->
-    <Compile Include="../../src/AiCalc.WinUI/Models/*.cs" Link="Models/%(Filename)%(Extension)" />
+    <Compile Include="../../src/AiCalc.WinUI/Models/*.cs" Link="Models/%(Filename)%(Extension)" Exclude="../../src/AiCalc.WinUI/Models/FunctionSuggestion.cs" />
     <Compile Include="../../src/AiCalc.WinUI/Models/CellObjects/*.cs" Link="Models/CellObjects/%(Filename)%(Extension)" />
     <Compile Include="../../src/AiCalc.WinUI/Services/DependencyGraph.cs" Link="Services/DependencyGraph.cs" />
   </ItemGroup>
