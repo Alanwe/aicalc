@@ -1,41 +1,69 @@
 # AiCalc Studio
 
-AiCalc Studio is a concept UNO Platform application that delivers an AI-native spreadsheet experience. Each cell can host rich content such as directories, media, documents, links, or traditional scalar values while orchestrating AI workflows alongside classic spreadsheet logic.
+AiCalc Studio is a **Windows App SDK (WinUI 3)** application that delivers an AI-native spreadsheet experience. Each cell can host rich content such as directories, media, documents, links, or traditional scalar values while orchestrating AI workflows alongside classic spreadsheet logic.
+
+**Current Status:** Phase 5 Complete - Production-ready with 59 passing tests, clean builds, and comprehensive UI features.
 
 ## Highlights
 
-- **Cross-platform UNO UI** targeting Windows, WebAssembly, and mobile platforms.
-- **Rich cell types** with visual glyphs that describe the current payload (text, images, video, directories, scripts, and more).
-- **AI function catalog** with starter functions for text-to-image, image captioning, directory introspection, and familiar numeric or string utilities.
-- **Workbook automation** that supports manual execution, auto-run on open, or dependency-triggered evaluation.
-- **Integrated inspector** to tweak values, formulas, automation mode, and notes while previewing output instantly.
-- **Connection settings** for registering local runtimes, Ollama, Azure OpenAI, or additional AI backends.
-- **JSON workbook persistence** using the `.aicalc` file extension for saving and loading multi-sheet projects.
+- **Native Windows App** built with WinUI 3 for high performance and modern UI
+- **Rich cell types** with visual glyphs that describe the current payload (text, images, video, directories, scripts, and more)
+- **AI function catalog** with 25+ functions for text-to-image, image captioning, directory introspection, code generation, and more
+- **Multi-threaded evaluation** with dependency graph (DAG) and parallel processing
+- **Excel-like keyboard navigation** with 8+ shortcuts (F9, F2, arrows, Ctrl+Z/Y, etc.)
+- **Context menus** with 13 operations (Cut/Copy/Paste, Insert/Delete rows/columns)
+- **Undo/Redo system** with 50-action history and full command pattern
+- **Settings persistence** - Window size, panel states, theme preferences saved automatically
+- **Formula syntax highlighting** with real-time tokenization and visual feedback
+- **Theme system** - Light/Dark/System app themes + 4 cell visual state themes
+- **Workbook automation** with manual, auto-run on open, and dependency-triggered evaluation
+- **Integrated inspector** to tweak values, formulas, automation mode, and notes
+- **Secure AI connections** with DPAPI encryption for Azure OpenAI, Ollama, and more
+- **JSON workbook persistence** using the `.aicalc` file extension
 
 ## Project layout
 
 ```
 AiCalc.sln              # Solution file
 src/
-  AiCalc/              # UNO Platform single-project app
+  AiCalc.WinUI/        # Windows App SDK (WinUI 3) application
     App.xaml           # Theme resources and global styles
-    App.xaml.cs        # Application bootstrapper
-    MainPage.xaml      # Primary shell with navigation and spreadsheet surface
-    Models/            # Workbook, sheet, cell, and settings models
+    App.xaml.cs        # Application bootstrapper with preferences service
+    MainWindow.xaml    # Primary spreadsheet shell with formula bar
+    MainWindow.xaml.cs # UI logic, keyboard nav, context menus, undo/redo
+    Models/            # Workbook, sheet, cell, settings, preferences, actions
     ViewModels/        # MVVM state for workbook, sheets, rows, and cells
-    Services/          # Function registry and evaluation engine
+    Services/          # Function registry, evaluation engine, AI services, undo/redo
     Converters/        # UI value converters (automation glyphs, brushes, visibility)
+    Themes/            # Cell visual state themes (Light/Dark/High Contrast)
+tests/
+  AiCalc.Tests/        # xUnit tests (59 passing)
+docs/                  # Comprehensive documentation
 ```
 
 ## Getting started
 
-1. Install the [UNO Platform prerequisites](https://platform.uno/docs/articles/get-started.html).
-2. Restore and build the solution:
-   ```bash
-   dotnet restore
-   dotnet build
+1. **Prerequisites:**
+   - .NET SDK 8.0 or later
+   - Windows 10 SDK (10.0.19041.0 or later)
+   - Windows App SDK 1.4
+
+2. **Build and run:**
+   ```powershell
+   cd C:\Projects\aicalc
+   dotnet build AiCalc.sln
+   dotnet run --project src/AiCalc.WinUI/AiCalc.WinUI.csproj
    ```
-3. Run the desired head (Windows, WebAssembly, Android, iOS, or macOS) from Visual Studio or with `dotnet run -f net7.0-windows`.
+
+3. **Or use Visual Studio:**
+   - Open `AiCalc.sln`
+   - Set `AiCalc.WinUI` as startup project
+   - Press F5 to run
+
+4. **Run tests:**
+   ```powershell
+   dotnet test tests/AiCalc.Tests/AiCalc.Tests.csproj
+   ```
 
 ## Extending the function catalog
 

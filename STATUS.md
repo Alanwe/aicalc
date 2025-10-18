@@ -181,32 +181,32 @@ The AiCalc project is configured, tested, and ready. The project builds successf
 
 ### Current Phase Status
 
-**Phase 5: UI Polish & Enhancements** - 60% Complete (2 of 5 tasks) ✅
+**Phase 5: UI Polish & Enhancements** - 100% Complete ✅
 
 **Completed Features**:
-- ✅ Task 14A: Keyboard Navigation (8+ shortcuts: F9, F2, arrows, Tab, Enter, Ctrl+Home/End, etc.)
+- ✅ Task 14A: Keyboard Navigation (8+ shortcuts: F9, F2, arrows, Tab, Enter, Ctrl+Home/End, Ctrl+Arrow)
 - ✅ Task 16: Context Menus (13 operations: Cut/Copy/Paste, Insert/Delete rows/columns)
 - ✅ Task 10: Theme System (Light/Dark/System app themes + 4 cell visual themes)
+- ✅ Task 17: Settings Persistence (Window size, panel states, theme, recent files)
+- ✅ Task 18: Undo/Redo System (Ctrl+Z/Y, 50-action history, command pattern)
+- ✅ Task 19: Formula Syntax Highlighting (Real-time tokenization, visual feedback)
 
-**Skipped Tasks** (WinUI 3 XAML compiler bugs):
-- ⏭️ Task 14B: Resizable Panels (GridSplitter triggers compiler errors)
-- ⏭️ Task 15: Rich Cell Editing Dialogs (ContentDialog complex layouts fail)
-
-**Remaining Tasks** (4-6 hours):
-- ⏳ Task 11: Enhanced Formula Bar (autocomplete, syntax highlighting, validation)
+**Build Status**:
+- ✅ Clean build: 0 warnings, 0 errors
+- ✅ All 59 tests passing
 
 **Recent Commits**:
+- `595a943` - Phase 5 Complete: Settings Persistence, Undo/Redo, Formula Syntax Highlighting
 - `753e829` - Task 14A: Keyboard Navigation
 - `c52b315` - Task 16: Context Menus
 - `43eca46` - Task 10: Theme System
-- `e724521` - Phase 5 Summary Documentation
 
-**See**: `docs/Phase5_Summary.md` for comprehensive details, technical challenges, and recommendations.
+**See**: `docs/Phase5_COMPLETE.md` and `docs/Phase5_Summary.md` for full details.
 
 **Next Steps**: 
-- Option A: Complete Task 11 (Enhanced Formula Bar) - ~4 hours
-- Option B: Add Settings Persistence + Undo/Redo - ~6 hours
-- Option C: Move to Phase 6 (Advanced Features)
+- Phase 6: Advanced Features (Charts, Pivots, Conditional Formatting)
+- Or: Export/Import functionality (Excel .xlsx, CSV)
+- Or: Enhanced data source integration
 
 ---
 

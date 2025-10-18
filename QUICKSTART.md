@@ -2,34 +2,43 @@
 
 ## ✅ What Works Now
 
-The project has been successfully migrated to **native Windows App SDK (WinUI 3)** and builds successfully!
+The project is a **native Windows App SDK (WinUI 3)** application with **Phase 5 complete** - featuring full UI polish, settings persistence, undo/redo, and formula syntax highlighting!
 
 ### Current Status:
 ```
 ✅ .NET 8.0 SDK installed
 ✅ Windows App SDK 1.4 configured  
-✅ All C# syntax errors fixed
-✅ All business logic migrated (Models, Services, ViewModels, Converters)
-✅ Project builds with 0 errors
-✅ Application runs on Windows
+✅ All business logic implemented (Models, Services, ViewModels, Converters)
+✅ Phase 5 UI features complete (keyboard nav, context menus, themes, undo/redo)
+✅ Settings persistence working (window size, panels, theme)
+✅ Project builds with 0 warnings, 0 errors
+✅ All 59 tests passing
+✅ Application runs smoothly on Windows
 ```
 
 ## 🚀 Commands
 
 ### Build the project:
 ```powershell
-dotnet build src/AiCalc.WinUI/AiCalc.WinUI.csproj
+dotnet build AiCalc.sln
 ```
 
 ### Run the application:
 ```powershell
 dotnet run --project src/AiCalc.WinUI/AiCalc.WinUI.csproj
+# Or use the launch script:
+.\launch.ps1
+```
+
+### Run tests:
+```powershell
+dotnet test tests/AiCalc.Tests/AiCalc.Tests.csproj
 ```
 
 ### Clean and rebuild:
 ```powershell
-dotnet clean src/AiCalc.WinUI/AiCalc.WinUI.csproj
-dotnet build src/AiCalc.WinUI/AiCalc.WinUI.csproj
+dotnet clean AiCalc.sln
+dotnet build AiCalc.sln
 ```
 
 ## 📁 Project Structure
@@ -41,10 +50,48 @@ dotnet build src/AiCalc.WinUI/AiCalc.WinUI.csproj
 - **Main Window**: `MainWindow.xaml`
 
 ### Core Components:
-- **Models/**: Data structures (CellAddress, SheetDefinition, WorkbookDefinition, etc.)
-- **Services/**: Business logic (FunctionRegistry, FunctionRunner)
+- **Models/**: Data structures (CellAddress, CellChangeAction, UserPreferences, etc.)
+- **Services/**: Business logic (FunctionRegistry, EvaluationEngine, UndoRedoManager, AI services)
 - **ViewModels/**: MVVM layer (WorkbookViewModel, SheetViewModel, CellViewModel)
 - **Converters/**: UI converters for WinUI bindings
+- **Themes/**: Cell visual state themes (Light/Dark/High Contrast)
+
+## 🎯 Phase 5 Features (Complete)
+
+### Keyboard Shortcuts:
+- **F9**: Recalculate all cells
+- **F2**: Enter edit mode
+- **Ctrl+Z**: Undo
+- **Ctrl+Y**: Redo
+- **Arrow Keys**: Navigate cells
+- **Tab/Shift+Tab**: Move right/left
+- **Enter/Shift+Enter**: Move down/up
+- **Ctrl+Home/End**: Jump to first/last cell
+- **Ctrl+Arrow**: Jump to data edge
+- **Delete**: Clear cell
+
+### Context Menu (Right-click):
+- Cut, Copy, Paste, Clear Contents
+- Insert Row Above/Below
+- Insert Column Left/Right
+- Delete Row/Column
+
+### Settings Persistence:
+- Window size and position
+- Panel widths and visibility
+- Theme preferences
+- Recent workbooks (up to 10)
+- Saved to: `%LocalAppData%\AiCalc\preferences.json`
+
+### Undo/Redo:
+- 50-action history
+- Tracks value, formula, format changes
+- Full command pattern implementation
+
+### Formula Highlighting:
+- Real-time tokenization
+- Shows function and cell reference counts
+- Supports sheet references (Sheet1!A1)
 
 ## 🔧 What Was Fixed
 
