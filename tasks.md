@@ -533,17 +533,27 @@ Whatever you think is the most robust and flexible. We need it to be secure. Id 
 
 ---
 
-### Task 25: File Format & Persistence
+### Task 25: File Format & Persistence ✅ 50% Complete
 **Goal**: Optimize save/load operations
 **Dependencies**: None
+**Status**: Partially complete - CSV and AutoSave implemented
 **Details**:
-- Optimize JSON serialization (currently implemented)
-- Add binary format option for large workbooks
-- Implement incremental save (only changed cells)
-- Add autosave feature with recovery
-- Support export to Excel (.xlsx), Not sure how easy this is as AICalc is a superset, this is optional for noow
-- Support import from CSV, Excel
-- Add version control (track changes, rollback)
+- ✅ Optimize JSON serialization (currently implemented)
+- ✅ Add autosave feature with recovery (timer-based, 1-60 min intervals, backup files)
+- ✅ Support export to CSV (single sheet, proper escaping, UTF-8)
+- ✅ Support import from CSV (creates new sheet, robust parsing)
+- ⏳ Add binary format option for large workbooks
+- ⏳ Implement incremental save (only changed cells)
+- ⏳ Support export to Excel (.xlsx) - optional
+- ⏳ Support import from Excel - optional
+- ⏳ Add version control (track changes, rollback)
+
+**Implementation**:
+- `Services/AutoSaveService.cs` - Automatic workbook saving with dirty flag tracking
+- `Services/CsvService.cs` - CSV export and import functionality
+- `WorkbookViewModel.cs` - ExportCsvAsync and ImportCsvAsync commands
+- `MainWindow.xaml` - Export CSV / Import CSV buttons with tooltips
+- `CellViewModel.cs` - MarkAsUpdated() marks workbook as dirty for autosave
 
 **Questions**:
 - Should binary format be default or opt-in? 

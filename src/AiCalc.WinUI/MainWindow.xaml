@@ -61,6 +61,12 @@
                         Click="SaveButton_Click" />
                 <Button Content="📂 Load"
                         Click="LoadButton_Click" />
+                <Button Content="📤 Export CSV"
+                        Click="ExportCsvButton_Click"
+                        ToolTipService.ToolTip="Export current sheet to CSV" />
+                <Button Content="📥 Import CSV"
+                        Click="ImportCsvButton_Click"
+                        ToolTipService.ToolTip="Import CSV as new sheet" />
                 <Button Content="⚙️ Settings"
                         Click="SettingsButton_Click" />
             </StackPanel>

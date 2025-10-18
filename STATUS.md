@@ -181,9 +181,22 @@ The AiCalc project is configured, tested, and ready. The project builds successf
 
 ### Current Phase Status
 
+**Phase 6: File Format & Persistence Enhancements** - In Progress 🚧
+
+**Completed Features** (Phase 6):
+- ✅ AutoSave Service (Timer-based, 1-60 min intervals, backup files)
+- ✅ CSV Export (Single sheet, proper escaping, UTF-8)
+- ✅ CSV Import (Creates new sheet, robust parsing)
+- ✅ UI Integration (Export CSV / Import CSV buttons with file picker)
+- ✅ Dirty Flag Tracking (Automatic marking on cell changes)
+
+**Build Status**:
+- ✅ Clean build: 0 warnings, 0 errors
+- ✅ All 59 tests passing
+
 **Phase 5: UI Polish & Enhancements** - 100% Complete ✅
 
-**Completed Features**:
+**Completed Features** (Phase 5):
 - ✅ Task 14A: Keyboard Navigation (8+ shortcuts: F9, F2, arrows, Tab, Enter, Ctrl+Home/End, Ctrl+Arrow)
 - ✅ Task 16: Context Menus (13 operations: Cut/Copy/Paste, Insert/Delete rows/columns)
 - ✅ Task 10: Theme System (Light/Dark/System app themes + 4 cell visual themes)
@@ -191,22 +204,17 @@ The AiCalc project is configured, tested, and ready. The project builds successf
 - ✅ Task 18: Undo/Redo System (Ctrl+Z/Y, 50-action history, command pattern)
 - ✅ Task 19: Formula Syntax Highlighting (Real-time tokenization, visual feedback)
 
-**Build Status**:
-- ✅ Clean build: 0 warnings, 0 errors
-- ✅ All 59 tests passing
-
 **Recent Commits**:
+- Phase 6: AutoSave & CSV Export/Import (current)
 - `595a943` - Phase 5 Complete: Settings Persistence, Undo/Redo, Formula Syntax Highlighting
-- `753e829` - Task 14A: Keyboard Navigation
-- `c52b315` - Task 16: Context Menus
-- `43eca46` - Task 10: Theme System
+- `29071a7` - Documentation updates for Phase 5
 
-**See**: `docs/Phase5_COMPLETE.md` and `docs/Phase5_Summary.md` for full details.
+**See**: `docs/Phase5_COMPLETE.md` and `docs/Phase5_Summary.md` for Phase 5 details.
 
 **Next Steps**: 
-- Phase 6: Advanced Features (Charts, Pivots, Conditional Formatting)
-- Or: Export/Import functionality (Excel .xlsx, CSV)
-- Or: Enhanced data source integration
+- Complete Phase 6: Enable autosave in settings, add Excel export/import
+- Phase 8 Advanced Features: Multi-cell selection, column resizing, freeze panes
+- Or: Data source integration (REST APIs, databases)
 
 ---
 

@@ -2,7 +2,7 @@
 
 ## ✅ What Works Now
 
-The project is a **native Windows App SDK (WinUI 3)** application with **Phase 5 complete** - featuring full UI polish, settings persistence, undo/redo, and formula syntax highlighting!
+The project is a **native Windows App SDK (WinUI 3)** application with **Phase 5 complete** and **Phase 6 in progress** - featuring AutoSave, CSV export/import, full UI polish, settings persistence, undo/redo, and formula syntax highlighting!
 
 ### Current Status:
 ```
@@ -10,6 +10,7 @@ The project is a **native Windows App SDK (WinUI 3)** application with **Phase 5
 ✅ Windows App SDK 1.4 configured  
 ✅ All business logic implemented (Models, Services, ViewModels, Converters)
 ✅ Phase 5 UI features complete (keyboard nav, context menus, themes, undo/redo)
+✅ Phase 6 features partial (AutoSave, CSV export/import)
 ✅ Settings persistence working (window size, panels, theme)
 ✅ Project builds with 0 warnings, 0 errors
 ✅ All 59 tests passing
@@ -92,6 +93,28 @@ dotnet build AiCalc.sln
 - Real-time tokenization
 - Shows function and cell reference counts
 - Supports sheet references (Sheet1!A1)
+
+## 🎯 Phase 6 Features (In Progress)
+
+### AutoSave:
+- Timer-based automatic saving (1-60 minute intervals, default: 5 min)
+- Dirty flag tracking (only saves when workbook has changed)
+- Backup files: `filename_autosave.aicalc`
+- Status notifications for save success/failure
+
+### CSV Export/Import:
+- **Export CSV**: Export current sheet to CSV format
+- **Import CSV**: Import CSV as new sheet
+- Proper CSV escaping (quotes, commas, newlines)
+- UTF-8 encoding
+- Robust parsing with quote handling
+- UI buttons: 📤 Export CSV, 📥 Import CSV
+
+### Usage:
+```
+Export: Click "📤 Export CSV" button
+Import: Click "📥 Import CSV" button, select CSV file in file picker
+```
 
 ## 🔧 What Was Fixed
 

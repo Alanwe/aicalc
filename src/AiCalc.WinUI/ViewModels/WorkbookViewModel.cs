@@ -25,6 +25,7 @@ public partial class WorkbookViewModel : BaseViewModel
     private readonly DependencyGraph _dependencyGraph;
     private readonly EvaluationEngine _evaluationEngine;
     private readonly UndoRedoManager _undoRedoManager;
+    private readonly AutoSaveService _autoSaveService;
 
     public WorkbookViewModel()
     {
@@ -42,6 +43,11 @@ public partial class WorkbookViewModel : BaseViewModel
             UndoCommand.NotifyCanExecuteChanged();
             RedoCommand.NotifyCanExecuteChanged();
         };
+
+        // Initialize autosave service (Phase 6)
+        _autoSaveService = new AutoSaveService(this);
+        _autoSaveService.AutoSaved += (s, path) => StatusMessage = $"Auto-saved to {Path.GetFileName(path)}";
+        _autoSaveService.AutoSaveFailed += (s, ex) => StatusMessage = $"Auto-save failed: {ex.Message}";
         
         Sheets = new ObservableCollection<SheetViewModel>();
         AttachSettings(Settings);
@@ -65,6 +71,14 @@ public partial class WorkbookViewModel : BaseViewModel
     public void RecordCellChange(CellChangeAction action)
     {
         _undoRedoManager.RecordAction(action);
+    }
+
+    /// <summary>
+    /// Mark workbook as dirty for autosave (Phase 6)
+    /// </summary>
+    public void MarkDirty()
+    {
+        _autoSaveService.MarkDirty();
     }
 
     public ObservableCollection<SheetViewModel> Sheets { get; }
@@ -194,6 +208,20 @@ public partial class WorkbookViewModel : BaseViewModel
         var json = JsonSerializer.Serialize(definition, _serializerOptions);
         await File.WriteAllTextAsync(fileName, json);
         StatusMessage = $"Saved to {fileName}";
+        
+        // Update autosave path
+        _autoSaveService.SetSavePath(fileName);
+    }
+
+    /// <summary>
+    /// Internal save method for autosave (Phase 6)
+    /// </summary>
+    private async Task SaveInternalAsync()
+    {
+        var definition = ToDefinition();
+        var fileName = Title.Replace(' ', '_') + ".aicalc";
+        var json = JsonSerializer.Serialize(definition, _serializerOptions);
+        await File.WriteAllTextAsync(fileName, json);
     }
 
     [RelayCommand]
@@ -215,6 +243,56 @@ public partial class WorkbookViewModel : BaseViewModel
 
         ApplyDefinition(definition);
         StatusMessage = $"Loaded {fileName}";
+    }
+
+    /// <summary>
+    /// Export current sheet to CSV (Phase 6)
+    /// </summary>
+    [RelayCommand]
+    private async Task ExportCsvAsync()
+    {
+        if (SelectedSheet == null)
+        {
+            StatusMessage = "No sheet selected";
+            return;
+        }
+
+        try
+        {
+            var fileName = $"{SelectedSheet.Name}.csv";
+            await CsvService.ExportSheetToCsvAsync(SelectedSheet, fileName);
+            StatusMessage = $"✅ Exported to {fileName}";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"❌ Export failed: {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// Import CSV into new sheet (Phase 6)
+    /// </summary>
+    [RelayCommand]
+    private async Task ImportCsvAsync(string filePath)
+    {
+        if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath))
+        {
+            StatusMessage = "❌ File not found";
+            return;
+        }
+
+        try
+        {
+            var sheetName = Path.GetFileNameWithoutExtension(filePath);
+            var sheet = await CsvService.ImportCsvToSheetAsync(filePath, sheetName, this);
+            Sheets.Add(sheet);
+            SelectedSheet = sheet;
+            StatusMessage = $"✅ Imported {sheetName} from CSV";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"❌ Import failed: {ex.Message}";
+        }
     }
 
     [RelayCommand]

@@ -390,6 +390,9 @@ public partial class CellViewModel : ObservableObject
         LastUpdated = DateTime.Now;
         VisualState = CellVisualState.JustUpdated;
         
+        // Mark workbook as dirty for autosave (Phase 6)
+        _workbook.MarkDirty();
+        
         // Flash effect: return to normal after 2 seconds
         await Task.Delay(2000);
         if (VisualState == CellVisualState.JustUpdated)

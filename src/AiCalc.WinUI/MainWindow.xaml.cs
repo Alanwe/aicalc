@@ -828,6 +828,27 @@ public sealed partial class MainWindow : Page
         RefreshSheetTabs();
     }
 
+    private async void ExportCsvButton_Click(object sender, RoutedEventArgs e)
+    {
+        await ViewModel.ExportCsvCommand.ExecuteAsync(null);
+    }
+
+    private async void ImportCsvButton_Click(object sender, RoutedEventArgs e)
+    {
+        // Show file picker
+        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+        var picker = new Windows.Storage.Pickers.FileOpenPicker();
+        WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+        picker.FileTypeFilter.Add(".csv");
+        
+        var file = await picker.PickSingleFileAsync();
+        if (file != null)
+        {
+            await ViewModel.ImportCsvCommand.ExecuteAsync(file.Path);
+            RefreshSheetTabs();
+        }
+    }
+
     private async void RecalculateButton_Click(object sender, RoutedEventArgs e)
     {
         // Recalculate All - same as F9 (Task 10)
