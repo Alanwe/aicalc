@@ -2,7 +2,7 @@
 
 AiCalc Studio is a **Windows App SDK (WinUI 3)** application that delivers an AI-native spreadsheet experience. Each cell can host rich content such as directories, media, documents, links, or traditional scalar values while orchestrating AI workflows alongside classic spreadsheet logic.
 
-**Current Status:** Phase 6 In Progress - AutoSave and CSV export/import implemented. 59 passing tests, clean builds, production-ready Phase 5 features.
+**Current Status:** Phase 6 Complete (80%) - AutoSave with settings UI, CSV export/import with file pickers. 59 passing tests, clean builds, production-ready.
 
 ## Highlights
 
@@ -16,8 +16,8 @@ AiCalc Studio is a **Windows App SDK (WinUI 3)** application that delivers an AI
 - **Settings persistence** - Window size, panel states, theme preferences saved automatically
 - **Formula syntax highlighting** with real-time tokenization and visual feedback
 - **Theme system** - Light/Dark/System app themes + 4 cell visual state themes
-- **AutoSave service** - Timer-based automatic saving with 1-60 minute intervals
-- **CSV export/import** - Export sheets to CSV, import CSV as new sheets
+- **AutoSave service** - Timer-based automatic saving with configurable intervals and settings UI
+- **CSV export/import** - File pickers for exporting sheets and importing as new sheets
 - **Workbook automation** with manual, auto-run on open, and dependency-triggered evaluation
 - **Integrated inspector** to tweak values, formulas, automation mode, and notes
 - **Secure AI connections** with DPAPI encryption for Azure OpenAI, Ollama, and more

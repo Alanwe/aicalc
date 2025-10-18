@@ -181,14 +181,16 @@ The AiCalc project is configured, tested, and ready. The project builds successf
 
 ### Current Phase Status
 
-**Phase 6: File Format & Persistence Enhancements** - In Progress 🚧
+**Phase 6: File Format & Persistence** - 80% Complete ✅
 
 **Completed Features** (Phase 6):
 - ✅ AutoSave Service (Timer-based, 1-60 min intervals, backup files)
-- ✅ CSV Export (Single sheet, proper escaping, UTF-8)
-- ✅ CSV Import (Creates new sheet, robust parsing)
-- ✅ UI Integration (Export CSV / Import CSV buttons with file picker)
+- ✅ AutoSave Settings UI (Enable/disable toggle, interval slider in Settings)
+- ✅ CSV Export (File save picker, proper escaping, UTF-8)
+- ✅ CSV Import (File open picker, creates new sheet, robust parsing)
+- ✅ User Preferences (AutoSaveEnabled, AutoSaveIntervalMinutes saved to disk)
 - ✅ Dirty Flag Tracking (Automatic marking on cell changes)
+- ⏳ Data Sources Integration (Tasks 18-19) - Deferred to later phase
 
 **Build Status**:
 - ✅ Clean build: 0 warnings, 0 errors

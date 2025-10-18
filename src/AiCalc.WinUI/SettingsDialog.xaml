@@ -328,6 +328,64 @@
             <!-- Workspace Tab -->
             <PivotItem Header="Workspace">
                 <StackPanel Spacing="16">
+                    <!-- AutoSave Section (Phase 6) -->
+                    <Border Style="{StaticResource SettingsSectionStyle}">
+                        <StackPanel Spacing="12">
+                            <TextBlock Text="AutoSave" 
+                                       Style="{StaticResource SubtitleTextBlockStyle}" />
+                            <TextBlock Text="Automatically save your workbook at regular intervals"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       TextWrapping="Wrap"
+                                       FontSize="12"
+                                       Margin="0,0,0,8"/>
+                            
+                            <ToggleSwitch x:Name="AutoSaveToggle"
+                                          Header="Enable AutoSave"
+                                          OnContent="Enabled"
+                                          OffContent="Disabled"
+                                          Toggled="AutoSaveToggle_Toggled" />
+
+                            <StackPanel Spacing="8" x:Name="AutoSaveIntervalPanel">
+                                <TextBlock Text="AutoSave Interval"
+                                           FontWeight="SemiBold"/>
+                                <TextBlock Text="How often to automatically save your workbook"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           TextWrapping="Wrap"
+                                           FontSize="12"/>
+                                
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    
+                                    <Slider x:Name="AutoSaveIntervalSlider"
+                                            Grid.Column="0"
+                                            Minimum="1"
+                                            Maximum="60"
+                                            StepFrequency="1"
+                                            TickFrequency="5"
+                                            TickPlacement="BottomRight"
+                                            ValueChanged="AutoSaveIntervalSlider_ValueChanged"
+                                            Margin="0,0,12,0"/>
+                                    
+                                    <TextBlock x:Name="AutoSaveIntervalLabel"
+                                               Grid.Column="1"
+                                               FontWeight="SemiBold"
+                                               FontSize="18"
+                                               VerticalAlignment="Center"
+                                               MinWidth="80"
+                                               TextAlignment="Center"/>
+                                </Grid>
+                                
+                                <TextBlock Text="Backup files are saved with '_autosave' suffix"
+                                           FontSize="11"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
                     <Border Style="{StaticResource SettingsSectionStyle}">
                         <StackPanel Spacing="12">
                             <TextBlock Text="Workspace" 

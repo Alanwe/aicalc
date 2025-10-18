@@ -49,6 +49,14 @@ public partial class WorkbookViewModel : BaseViewModel
         _autoSaveService.AutoSaved += (s, path) => StatusMessage = $"Auto-saved to {Path.GetFileName(path)}";
         _autoSaveService.AutoSaveFailed += (s, ex) => StatusMessage = $"Auto-save failed: {ex.Message}";
         
+        // Load AutoSave preferences
+        if (App.PreferencesService != null)
+        {
+            var prefs = App.PreferencesService.LoadPreferences();
+            _autoSaveService.IsEnabled = prefs.AutoSaveEnabled;
+            _autoSaveService.IntervalMinutes = prefs.AutoSaveIntervalMinutes;
+        }
+        
         Sheets = new ObservableCollection<SheetViewModel>();
         AttachSettings(Settings);
         AddSheet();
@@ -79,6 +87,22 @@ public partial class WorkbookViewModel : BaseViewModel
     public void MarkDirty()
     {
         _autoSaveService.MarkDirty();
+    }
+
+    /// <summary>
+    /// Set AutoSave enabled state (Phase 6)
+    /// </summary>
+    public void SetAutoSaveEnabled(bool enabled)
+    {
+        _autoSaveService.IsEnabled = enabled;
+    }
+
+    /// <summary>
+    /// Set AutoSave interval in minutes (Phase 6)
+    /// </summary>
+    public void SetAutoSaveInterval(int minutes)
+    {
+        _autoSaveService.IntervalMinutes = minutes;
     }
 
     public ObservableCollection<SheetViewModel> Sheets { get; }

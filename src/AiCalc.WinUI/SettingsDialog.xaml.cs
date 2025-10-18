@@ -30,6 +30,14 @@ public sealed partial class SettingsDialog : ContentDialog
         // Initialize Appearance tab - Cell Visual Theme
         ThemeComboBox.SelectedIndex = (int)Settings.SelectedTheme;
         UpdateThemePreview(Settings.SelectedTheme);
+        
+        // Initialize AutoSave settings (Phase 6)
+        var prefs = App.PreferencesService.LoadPreferences();
+        AutoSaveToggle.IsOn = prefs.AutoSaveEnabled;
+        AutoSaveIntervalSlider.Value = prefs.AutoSaveIntervalMinutes;
+        AutoSaveIntervalLabel.Text = $"{prefs.AutoSaveIntervalMinutes} min";
+        AutoSaveIntervalPanel.Opacity = prefs.AutoSaveEnabled ? 1.0 : 0.5;
+        AutoSaveIntervalSlider.IsEnabled = prefs.AutoSaveEnabled;
     }
 
     private async void AddService_Click(object sender, RoutedEventArgs e)
@@ -230,5 +238,47 @@ public sealed partial class SettingsDialog : ContentDialog
         PreviewManualUpdate.Background = new SolidColorBrush(manualUpdate);
         PreviewError.Background = new SolidColorBrush(error);
         PreviewDependency.Background = new SolidColorBrush(dependency);
+    }
+
+    private void AutoSaveToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        var isEnabled = AutoSaveToggle.IsOn;
+        
+        // Update UI
+        AutoSaveIntervalPanel.Opacity = isEnabled ? 1.0 : 0.5;
+        AutoSaveIntervalSlider.IsEnabled = isEnabled;
+        
+        // Save preference
+        var prefs = App.PreferencesService.LoadPreferences();
+        prefs.AutoSaveEnabled = isEnabled;
+        App.PreferencesService.SavePreferences(prefs);
+        
+        // Apply to workbook's autosave service
+        var mainWindow = App.MainWindow?.Content as MainWindow;
+        if (mainWindow?.ViewModel != null)
+        {
+            mainWindow.ViewModel.SetAutoSaveEnabled(isEnabled);
+        }
+    }
+
+    private void AutoSaveIntervalSlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
+    {
+        if (AutoSaveIntervalLabel != null)
+        {
+            var value = (int)e.NewValue;
+            AutoSaveIntervalLabel.Text = $"{value} min";
+            
+            // Save preference
+            var prefs = App.PreferencesService.LoadPreferences();
+            prefs.AutoSaveIntervalMinutes = value;
+            App.PreferencesService.SavePreferences(prefs);
+            
+            // Apply to workbook's autosave service
+            var mainWindow = App.MainWindow?.Content as MainWindow;
+            if (mainWindow?.ViewModel != null)
+            {
+                mainWindow.ViewModel.SetAutoSaveInterval(value);
+            }
+        }
     }
 }

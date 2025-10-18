@@ -533,15 +533,17 @@ Whatever you think is the most robust and flexible. We need it to be secure. Id 
 
 ---
 
-### Task 25: File Format & Persistence ✅ 50% Complete
+### Task 25: File Format & Persistence ✅ 80% Complete
 **Goal**: Optimize save/load operations
 **Dependencies**: None
-**Status**: Partially complete - CSV and AutoSave implemented
+**Status**: Core features complete - AutoSave UI, CSV export/import with file pickers
 **Details**:
 - ✅ Optimize JSON serialization (currently implemented)
 - ✅ Add autosave feature with recovery (timer-based, 1-60 min intervals, backup files)
-- ✅ Support export to CSV (single sheet, proper escaping, UTF-8)
-- ✅ Support import from CSV (creates new sheet, robust parsing)
+- ✅ AutoSave settings UI (enable/disable toggle, interval slider in Settings dialog)
+- ✅ Support export to CSV with file save picker (single sheet, proper escaping, UTF-8)
+- ✅ Support import from CSV with file open picker (creates new sheet, robust parsing)
+- ✅ User preferences persistence (AutoSaveEnabled, AutoSaveIntervalMinutes)
 - ⏳ Add binary format option for large workbooks
 - ⏳ Implement incremental save (only changed cells)
 - ⏳ Support export to Excel (.xlsx) - optional
@@ -551,8 +553,12 @@ Whatever you think is the most robust and flexible. We need it to be secure. Id 
 **Implementation**:
 - `Services/AutoSaveService.cs` - Automatic workbook saving with dirty flag tracking
 - `Services/CsvService.cs` - CSV export and import functionality
-- `WorkbookViewModel.cs` - ExportCsvAsync and ImportCsvAsync commands
+- `Models/UserPreferences.cs` - AutoSaveEnabled and AutoSaveIntervalMinutes properties
+- `SettingsDialog.xaml` - AutoSave section with toggle and slider
+- `SettingsDialog.xaml.cs` - AutoSave event handlers, preference loading/saving
+- `WorkbookViewModel.cs` - SetAutoSaveEnabled/SetAutoSaveInterval methods, CSV commands
 - `MainWindow.xaml` - Export CSV / Import CSV buttons with tooltips
+- `MainWindow.xaml.cs` - File pickers for CSV export/import
 - `CellViewModel.cs` - MarkAsUpdated() marks workbook as dirty for autosave
 
 **Questions**:

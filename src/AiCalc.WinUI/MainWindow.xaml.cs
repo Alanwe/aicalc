@@ -830,7 +830,33 @@ public sealed partial class MainWindow : Page
 
     private async void ExportCsvButton_Click(object sender, RoutedEventArgs e)
     {
-        await ViewModel.ExportCsvCommand.ExecuteAsync(null);
+        if (ViewModel.SelectedSheet == null)
+        {
+            ViewModel.StatusMessage = "No sheet selected";
+            return;
+        }
+
+        // Show file save picker
+        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+        var picker = new Windows.Storage.Pickers.FileSavePicker();
+        WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+        picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary;
+        picker.FileTypeChoices.Add("CSV Files", new System.Collections.Generic.List<string>() { ".csv" });
+        picker.SuggestedFileName = ViewModel.SelectedSheet.Name;
+        
+        var file = await picker.PickSaveFileAsync();
+        if (file != null)
+        {
+            try
+            {
+                await CsvService.ExportSheetToCsvAsync(ViewModel.SelectedSheet, file.Path);
+                ViewModel.StatusMessage = $"✅ Exported to {file.Name}";
+            }
+            catch (Exception ex)
+            {
+                ViewModel.StatusMessage = $"❌ Export failed: {ex.Message}";
+            }
+        }
     }
 
     private async void ImportCsvButton_Click(object sender, RoutedEventArgs e)

@@ -66,4 +66,14 @@ public class UserPreferences
     /// Last opened workbook path
     /// </summary>
     public string? LastWorkbookPath { get; set; }
+
+    /// <summary>
+    /// Enable automatic saving (Phase 6)
+    /// </summary>
+    public bool AutoSaveEnabled { get; set; } = true;
+
+    /// <summary>
+    /// AutoSave interval in minutes (Phase 6)
+    /// </summary>
+    public int AutoSaveIntervalMinutes { get; set; } = 5;
 }

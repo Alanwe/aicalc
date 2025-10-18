@@ -2,7 +2,7 @@
 
 ## ✅ What Works Now
 
-The project is a **native Windows App SDK (WinUI 3)** application with **Phase 5 complete** and **Phase 6 in progress** - featuring AutoSave, CSV export/import, full UI polish, settings persistence, undo/redo, and formula syntax highlighting!
+The project is a **native Windows App SDK (WinUI 3)** application with **Phase 5 complete** and **Phase 6 80% complete** - featuring AutoSave with settings UI, CSV export/import with file pickers, full UI polish, settings persistence, undo/redo, and formula syntax highlighting!
 
 ### Current Status:
 ```
@@ -10,8 +10,8 @@ The project is a **native Windows App SDK (WinUI 3)** application with **Phase 5
 ✅ Windows App SDK 1.4 configured  
 ✅ All business logic implemented (Models, Services, ViewModels, Converters)
 ✅ Phase 5 UI features complete (keyboard nav, context menus, themes, undo/redo)
-✅ Phase 6 features partial (AutoSave, CSV export/import)
-✅ Settings persistence working (window size, panels, theme)
+✅ Phase 6 core complete (AutoSave with UI, CSV export/import with pickers)
+✅ Settings persistence working (window size, panels, theme, autosave)
 ✅ Project builds with 0 warnings, 0 errors
 ✅ All 59 tests passing
 ✅ Application runs smoothly on Windows
@@ -94,17 +94,21 @@ dotnet build AiCalc.sln
 - Shows function and cell reference counts
 - Supports sheet references (Sheet1!A1)
 
-## 🎯 Phase 6 Features (In Progress)
+## 🎯 Phase 6 Features (Core Complete - 80%)
 
 ### AutoSave:
 - Timer-based automatic saving (1-60 minute intervals, default: 5 min)
 - Dirty flag tracking (only saves when workbook has changed)
 - Backup files: `filename_autosave.aicalc`
 - Status notifications for save success/failure
+- **Settings UI**: Configure in ⚙️ Settings → Workspace tab
+  - Toggle: Enable/Disable AutoSave
+  - Slider: Set interval (1-60 minutes)
+  - Changes apply immediately to active workbook
 
 ### CSV Export/Import:
-- **Export CSV**: Export current sheet to CSV format
-- **Import CSV**: Import CSV as new sheet
+- **Export CSV**: Export current sheet to CSV format with file save dialog
+- **Import CSV**: Import CSV as new sheet with file open dialog
 - Proper CSV escaping (quotes, commas, newlines)
 - UTF-8 encoding
 - Robust parsing with quote handling
@@ -112,8 +116,23 @@ dotnet build AiCalc.sln
 
 ### Usage:
 ```
-Export: Click "📤 Export CSV" button
-Import: Click "📥 Import CSV" button, select CSV file in file picker
+AutoSave Settings:
+1. Click "⚙️ Settings" button
+2. Go to "Workspace" tab
+3. Toggle "Enable AutoSave" on/off
+4. Adjust interval slider (1-60 minutes)
+5. Click "Save" to apply
+
+CSV Export:
+1. Select the sheet you want to export
+2. Click "📤 Export CSV" button
+3. Choose location and filename in save dialog
+4. Click "Save"
+
+CSV Import:
+1. Click "📥 Import CSV" button
+2. Select CSV file in open dialog
+3. New sheet is created with imported data
 ```
 
 ## 🔧 What Was Fixed
