@@ -44,7 +44,7 @@ public class FunctionRunner
         // Check if this is an AI function
         if (descriptor.Category == FunctionCategory.AI)
         {
-            return await ExecuteAIFunctionAsync(name, arguments, context);
+            return await ExecuteAIFunctionAsync(descriptor, arguments, context);
         }
         
         return await descriptor.Handler(context);
@@ -53,22 +53,24 @@ public class FunctionRunner
     /// <summary>
     /// Executes AI functions by routing to the appropriate AI service
     /// </summary>
-    private async Task<FunctionExecutionResult> ExecuteAIFunctionAsync(string functionName, IReadOnlyList<CellViewModel> arguments, FunctionEvaluationContext context)
+    private async Task<FunctionExecutionResult> ExecuteAIFunctionAsync(FunctionDescriptor descriptor, IReadOnlyList<CellViewModel> arguments, FunctionEvaluationContext context)
     {
         try
         {
             var client = App.AIServices.GetDefaultClient();
             if (client == null)
             {
-                return new FunctionExecutionResult(new CellValue(
-                    CellObjectType.Error,
-                    "No AI service configured",
-                    "Error: No default AI service connection. Please configure an AI service in Settings."));
+                return new FunctionExecutionResult(
+                    new CellValue(
+                        CellObjectType.Error,
+                        "No AI service configured",
+                        "Error: No default AI service connection. Please configure an AI service in Settings."),
+                    "No AI service configured");
             }
 
             AIResponse response;
 
-            switch (functionName.ToUpperInvariant())
+            switch (descriptor.Name.ToUpperInvariant())
             {
                 case "IMAGE_TO_CAPTION":
                     response = await ExecuteImageToCaptionAsync(client, arguments);
@@ -107,37 +109,55 @@ public class FunctionRunner
                     break;
 
                 default:
-                    return new FunctionExecutionResult(new CellValue(
-                        CellObjectType.Error,
-                        $"AI function '{functionName}' not implemented",
-                        $"Error: AI function '{functionName}' is not yet implemented."));
+                    return new FunctionExecutionResult(
+                        new CellValue(
+                            CellObjectType.Error,
+                            $"AI function '{descriptor.Name}' not implemented",
+                            $"Error: AI function '{descriptor.Name}' is not yet implemented."),
+                        "Not implemented");
             }
 
             if (response.Success)
             {
                 // Determine appropriate cell type based on function
-                var cellType = functionName.ToUpperInvariant() switch
+                var cellType = descriptor.Name.ToUpperInvariant() switch
                 {
                     "TEXT_TO_IMAGE" => CellObjectType.Image,
                     _ => CellObjectType.Text
                 };
 
-                return new FunctionExecutionResult(new CellValue(cellType, response.Result, response.Result));
+                var diagnostics = response.Metadata != null && response.Metadata.TryGetValue("model", out var model)
+                    ? $"Model: {model}, Tokens: {response.TokensUsed}, Duration: {response.Duration.TotalSeconds:F1}s"
+                    : $"Tokens: {response.TokensUsed}, Duration: {response.Duration.TotalSeconds:F1}s";
+
+                return new FunctionExecutionResult(
+                    new CellValue(cellType, response.Result, response.Result),
+                    diagnostics,
+                    null,
+                    null,
+                    response);
             }
             else
             {
-                return new FunctionExecutionResult(new CellValue(
-                    CellObjectType.Error,
-                    response.Error ?? "Unknown error",
-                    $"AI Error: {response.Error}"));
+                return new FunctionExecutionResult(
+                    new CellValue(
+                        CellObjectType.Error,
+                        response.Error ?? "Unknown error",
+                        $"AI Error: {response.Error}"),
+                    response.Error,
+                    null,
+                    null,
+                    response);
             }
         }
         catch (Exception ex)
         {
-            return new FunctionExecutionResult(new CellValue(
-                CellObjectType.Error,
-                ex.Message,
-                $"Error executing AI function: {ex.Message}"));
+            return new FunctionExecutionResult(
+                new CellValue(
+                    CellObjectType.Error,
+                    ex.Message,
+                    $"Error executing AI function: {ex.Message}"),
+                ex.Message);
         }
     }
 

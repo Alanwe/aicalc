@@ -21,15 +21,12 @@
 
             <ComboBox x:Name="ProviderComboBox"
                       Header="Provider *"
-                      SelectedItem="{x:Bind Connection.Provider, Mode=TwoWay}"
+                      SelectedValuePath="Tag"
+                      SelectedValue="{x:Bind Connection.Provider, Mode=TwoWay}"
                       HorizontalAlignment="Stretch">
-                <x:String>Azure OpenAI</x:String>
-                <x:String>OpenAI</x:String>
-                <x:String>Anthropic</x:String>
-                <x:String>Google AI</x:String>
-                <x:String>Hugging Face</x:String>
-                <x:String>Local (Ollama)</x:String>
-                <x:String>Custom</x:String>
+                <ComboBoxItem Content="Azure OpenAI" Tag="AzureOpenAI" />
+                <ComboBoxItem Content="OpenAI (Coming Soon)" Tag="OpenAI" IsEnabled="False" />
+                <ComboBoxItem Content="Local (Ollama)" Tag="Ollama" />
             </ComboBox>
 
             <TextBox x:Name="EndpointTextBox"
@@ -40,7 +37,7 @@
             <PasswordBox x:Name="ApiKeyPasswordBox"
                          Header="API Key"
                          PlaceholderText="Enter your API key"
-                         Password="{x:Bind Connection.ApiKey, Mode=TwoWay}" />
+                         PasswordChanged="ApiKeyPasswordBox_PasswordChanged" />
 
             <TextBox x:Name="ModelTextBox"
                      Header="Text Model *"

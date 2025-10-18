@@ -10,6 +10,16 @@ namespace AiCalc;
 
 public sealed partial class ServiceConnectionDialog : ContentDialog
 {
+    private string _apiKeyPlainText = string.Empty;
+    private PasswordBox _apiKeyBox = null!;
+    private ComboBox _providerComboBox = null!;
+    private TextBox _endpointTextBox = null!;
+    private TextBox _modelTextBox = null!;
+    private TextBox _visionModelTextBox = null!;
+    private TextBox _deploymentTextBox = null!;
+    private Button _testConnectionButton = null!;
+    private TextBlock _connectionStatusText = null!;
+
     public WorkspaceConnection Connection { get; private set; }
 
     public ServiceConnectionDialog() : this(null)
@@ -21,26 +31,22 @@ public sealed partial class ServiceConnectionDialog : ContentDialog
         // Create a copy to avoid modifying the original until saved
         if (existingConnection != null)
         {
-            Connection = new WorkspaceConnection
+            Connection = existingConnection.Clone();
+            if (!string.IsNullOrWhiteSpace(existingConnection.ApiKey))
             {
-                Id = existingConnection.Id,
-                Name = existingConnection.Name,
-                Provider = existingConnection.Provider,
-                Endpoint = existingConnection.Endpoint,
-                ApiKey = existingConnection.ApiKey,
-                Model = existingConnection.Model,
-                Deployment = existingConnection.Deployment,
-                IsDefault = existingConnection.IsDefault
-            };
+                _apiKeyPlainText = CredentialService.IsEncrypted(existingConnection.ApiKey)
+                    ? CredentialService.Decrypt(existingConnection.ApiKey)
+                    : existingConnection.ApiKey;
+            }
         }
         else
         {
             Connection = new WorkspaceConnection
             {
-                Name = "",
-                Provider = "Azure OpenAI",
-                Endpoint = "",
-                ApiKey = "",
+                Name = string.Empty,
+                Provider = "AzureOpenAI",
+                Endpoint = string.Empty,
+                ApiKey = string.Empty,
                 Model = "gpt-4",
                 VisionModel = "gpt-4-vision-preview",
                 ImageModel = "dall-e-3",
@@ -51,7 +57,17 @@ public sealed partial class ServiceConnectionDialog : ContentDialog
             };
         }
 
-        InitializeComponent();
+    this.InitializeComponent();
+    _apiKeyBox = GetRequiredElement<PasswordBox>("ApiKeyPasswordBox");
+    _providerComboBox = GetRequiredElement<ComboBox>("ProviderComboBox");
+    _endpointTextBox = GetRequiredElement<TextBox>("EndpointTextBox");
+    _modelTextBox = GetRequiredElement<TextBox>("ModelTextBox");
+    _visionModelTextBox = GetRequiredElement<TextBox>("VisionModelTextBox");
+    _deploymentTextBox = GetRequiredElement<TextBox>("DeploymentTextBox");
+    _testConnectionButton = GetRequiredElement<Button>("TestConnectionButton");
+    _connectionStatusText = GetRequiredElement<TextBlock>("ConnectionStatusText");
+
+    _apiKeyBox.Password = _apiKeyPlainText;
     }
 
     private void SaveButton_Click(ContentDialog sender, ContentDialogButtonClickEventArgs args)
@@ -85,6 +101,10 @@ public sealed partial class ServiceConnectionDialog : ContentDialog
             ShowValidationError("Endpoint must be a valid URL");
             return;
         }
+
+        Connection.ApiKey = string.IsNullOrWhiteSpace(_apiKeyPlainText)
+            ? string.Empty
+            : CredentialService.Encrypt(_apiKeyPlainText);
     }
 
     private async void ShowValidationError(string message)
@@ -101,89 +121,87 @@ public sealed partial class ServiceConnectionDialog : ContentDialog
 
     private void PresetAzureOpenAI_Click(object sender, RoutedEventArgs e)
     {
-        Connection.Provider = "Azure OpenAI";
+        Connection.Provider = "AzureOpenAI";
         Connection.Endpoint = "https://your-resource.openai.azure.com/";
         Connection.Model = "gpt-4";
         Connection.Deployment = "gpt-4-deployment";
         
         // Trigger UI update
-        ProviderComboBox.SelectedItem = "Azure OpenAI";
-        EndpointTextBox.Text = Connection.Endpoint;
-        ModelTextBox.Text = Connection.Model;
-        DeploymentTextBox.Text = Connection.Deployment;
+    _providerComboBox.SelectedValue = Connection.Provider;
+    _endpointTextBox.Text = Connection.Endpoint;
+    _modelTextBox.Text = Connection.Model;
+    _deploymentTextBox.Text = Connection.Deployment;
     }
 
     private void PresetOpenAI_Click(object sender, RoutedEventArgs e)
     {
-        Connection.Provider = "OpenAI";
-        Connection.Endpoint = "https://api.openai.com/v1";
-        Connection.Model = "gpt-4";
-        Connection.Deployment = null;
-        
-        // Trigger UI update
-        ProviderComboBox.SelectedItem = "OpenAI";
-        EndpointTextBox.Text = Connection.Endpoint;
-        ModelTextBox.Text = Connection.Model;
-        DeploymentTextBox.Text = "";
+        ShowValidationError("Native OpenAI support is coming soon. Please configure Azure OpenAI or Ollama.");
+        return;
     }
 
     private void PresetOllama_Click(object sender, RoutedEventArgs e)
     {
-        Connection.Provider = "Local (Ollama)";
+        Connection.Provider = "Ollama";
         Connection.Endpoint = "http://localhost:11434";
         Connection.Model = "llama2";
         Connection.VisionModel = "llava";
         Connection.Deployment = null;
-        Connection.ApiKey = "";
+        _apiKeyPlainText = string.Empty;
         
         // Trigger UI update
-        ProviderComboBox.SelectedItem = "Local (Ollama)";
-        EndpointTextBox.Text = Connection.Endpoint;
-        ModelTextBox.Text = Connection.Model;
-        VisionModelTextBox.Text = Connection.VisionModel;
-        DeploymentTextBox.Text = "";
-        ApiKeyPasswordBox.Password = "";
+    _providerComboBox.SelectedValue = Connection.Provider;
+    _endpointTextBox.Text = Connection.Endpoint;
+    _modelTextBox.Text = Connection.Model;
+    _visionModelTextBox.Text = Connection.VisionModel;
+    _deploymentTextBox.Text = string.Empty;
+    _apiKeyBox.Password = string.Empty;
     }
 
     private async void TestConnection_Click(object sender, RoutedEventArgs e)
     {
-        TestConnectionButton.IsEnabled = false;
-        ConnectionStatusText.Visibility = Visibility.Visible;
-        ConnectionStatusText.Foreground = new SolidColorBrush(Microsoft.UI.Colors.Gray);
-        ConnectionStatusText.Text = "Testing connection...";
+    _testConnectionButton.IsEnabled = false;
+    _connectionStatusText.Visibility = Visibility.Visible;
+    _connectionStatusText.Foreground = new SolidColorBrush(Microsoft.UI.Colors.Gray);
+    _connectionStatusText.Text = "Testing connection...";
 
         try
         {
             // Validate required fields first
             if (string.IsNullOrWhiteSpace(Connection.Endpoint))
             {
-                ConnectionStatusText.Foreground = new SolidColorBrush(Microsoft.UI.Colors.Red);
-                ConnectionStatusText.Text = "❌ Error: Endpoint is required";
+                _connectionStatusText.Foreground = new SolidColorBrush(Microsoft.UI.Colors.Red);
+                _connectionStatusText.Text = "❌ Error: Endpoint is required";
                 return;
             }
 
             // Create temporary client for testing
-            IAIServiceClient client = Connection.Provider switch
+            var testConnection = Connection.Clone();
+            testConnection.ApiKey = string.IsNullOrWhiteSpace(_apiKeyPlainText)
+                ? string.Empty
+                : CredentialService.Encrypt(_apiKeyPlainText);
+
+            IAIServiceClient client = testConnection.Provider switch
             {
-                "Azure OpenAI" => new AzureOpenAIClient(Connection),
-                "Local (Ollama)" => new OllamaClient(Connection),
-                _ => throw new NotSupportedException($"Provider '{Connection.Provider}' is not yet supported")
+                "AzureOpenAI" => new AzureOpenAIClient(testConnection),
+                "Ollama" => new OllamaClient(testConnection),
+                _ => throw new NotSupportedException($"Provider '{testConnection.Provider}' is not yet supported")
             };
 
             var result = await client.TestConnectionAsync();
             
             if (result.Success)
             {
-                ConnectionStatusText.Foreground = new SolidColorBrush(Microsoft.UI.Colors.Green);
-                ConnectionStatusText.Text = $"✅ Connection successful! {result.Result}";
+                _connectionStatusText.Foreground = new SolidColorBrush(Microsoft.UI.Colors.Green);
+                _connectionStatusText.Text = $"✅ Connection successful! {result.Result}";
                 Connection.IsActive = true;
                 Connection.LastTested = DateTime.Now;
                 Connection.LastTestError = null;
+                Connection.ApiKey = testConnection.ApiKey;
             }
             else
             {
-                ConnectionStatusText.Foreground = new SolidColorBrush(Microsoft.UI.Colors.Red);
-                ConnectionStatusText.Text = $"❌ Connection failed: {result.Error}";
+                _connectionStatusText.Foreground = new SolidColorBrush(Microsoft.UI.Colors.Red);
+                _connectionStatusText.Text = $"❌ Connection failed: {result.Error}";
                 Connection.IsActive = false;
                 Connection.LastTested = DateTime.Now;
                 Connection.LastTestError = result.Error;
@@ -191,15 +209,38 @@ public sealed partial class ServiceConnectionDialog : ContentDialog
         }
         catch (Exception ex)
         {
-            ConnectionStatusText.Foreground = new SolidColorBrush(Microsoft.UI.Colors.Red);
-            ConnectionStatusText.Text = $"❌ Error: {ex.Message}";
+            _connectionStatusText.Foreground = new SolidColorBrush(Microsoft.UI.Colors.Red);
+            _connectionStatusText.Text = $"❌ Error: {ex.Message}";
             Connection.IsActive = false;
             Connection.LastTested = DateTime.Now;
             Connection.LastTestError = ex.Message;
         }
         finally
         {
-            TestConnectionButton.IsEnabled = true;
+            _testConnectionButton.IsEnabled = true;
         }
+    }
+
+    private void ApiKeyPasswordBox_PasswordChanged(object sender, RoutedEventArgs e)
+    {
+        if (sender is PasswordBox passwordBox)
+        {
+            _apiKeyPlainText = passwordBox.Password;
+        }
+        else
+        {
+            _apiKeyPlainText = _apiKeyBox.Password;
+        }
+    }
+
+    private T GetRequiredElement<T>(string name) where T : class
+    {
+        var element = FindName(name) as T;
+        if (element == null)
+        {
+            throw new InvalidOperationException($"Could not locate element '{name}' in ServiceConnectionDialog template.");
+        }
+
+        return element;
     }
 }

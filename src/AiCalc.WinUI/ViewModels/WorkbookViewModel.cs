@@ -1,11 +1,13 @@
 using System;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using AiCalc.Models;
 using AiCalc.Services;
+using AiCalc.Services.AI;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -35,9 +37,7 @@ public partial class WorkbookViewModel : BaseViewModel
             Settings.DefaultEvaluationTimeoutSeconds);
         
         Sheets = new ObservableCollection<SheetViewModel>();
-        Settings.Connections.Add(new WorkspaceConnection { Name = "Local Python Runtime", Provider = "Python", Endpoint = "local://python", IsDefault = true });
-        Settings.Connections.Add(new WorkspaceConnection { Name = "Ollama", Provider = "Ollama", Endpoint = "http://localhost:11434" });
-        Settings.Connections.Add(new WorkspaceConnection { Name = "Azure OpenAI", Provider = "Azure OpenAI", Endpoint = "https://api.contoso.azure.com" });
+        AttachSettings(Settings);
         AddSheet();
         SelectedSheet = Sheets.FirstOrDefault();
     }
@@ -271,5 +271,122 @@ public partial class WorkbookViewModel : BaseViewModel
         }
 
         SelectedSheet = Sheets.FirstOrDefault();
+    }
+
+    partial void OnSettingsChanging(WorkbookSettings value)
+    {
+        if (value != null)
+        {
+            value.Connections.CollectionChanged -= OnConnectionsCollectionChanged;
+        }
+    }
+
+    partial void OnSettingsChanged(WorkbookSettings value)
+    {
+        if (value != null)
+        {
+            AttachSettings(value);
+        }
+    }
+
+    private void AttachSettings(WorkbookSettings settings)
+    {
+        settings.Connections.CollectionChanged -= OnConnectionsCollectionChanged;
+        settings.Connections.CollectionChanged += OnConnectionsCollectionChanged;
+        SynchronizeConnections(settings);
+    }
+
+    private void SynchronizeConnections(WorkbookSettings settings)
+    {
+        App.AIServices.Clear();
+        foreach (var connection in settings.Connections)
+        {
+            EnsureEncryptedApiKey(connection);
+            if (connection.IsActive)
+            {
+                App.AIServices.RegisterConnection(connection);
+            }
+        }
+    }
+
+    private void OnConnectionsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        switch (e.Action)
+        {
+            case NotifyCollectionChangedAction.Add:
+                if (e.NewItems != null)
+                {
+                    foreach (WorkspaceConnection connection in e.NewItems)
+                    {
+                        EnsureEncryptedApiKey(connection);
+                        if (connection.IsActive)
+                        {
+                            App.AIServices.RegisterConnection(connection);
+                        }
+                    }
+                }
+                break;
+
+            case NotifyCollectionChangedAction.Remove:
+                if (e.OldItems != null)
+                {
+                    foreach (WorkspaceConnection connection in e.OldItems)
+                    {
+                        App.AIServices.RemoveConnection(connection.Id);
+                    }
+                }
+                break;
+
+            case NotifyCollectionChangedAction.Replace:
+                if (e.OldItems != null)
+                {
+                    foreach (WorkspaceConnection connection in e.OldItems)
+                    {
+                        App.AIServices.RemoveConnection(connection.Id);
+                    }
+                }
+
+                if (e.NewItems != null)
+                {
+                    foreach (WorkspaceConnection connection in e.NewItems)
+                    {
+                        EnsureEncryptedApiKey(connection);
+                        if (connection.IsActive)
+                        {
+                            App.AIServices.RegisterConnection(connection);
+                        }
+                    }
+                }
+                break;
+
+            case NotifyCollectionChangedAction.Reset:
+                App.AIServices.Clear();
+                foreach (var connection in Settings.Connections)
+                {
+                    EnsureEncryptedApiKey(connection);
+                    if (connection.IsActive)
+                    {
+                        App.AIServices.RegisterConnection(connection);
+                    }
+                }
+                break;
+
+            case NotifyCollectionChangedAction.Move:
+                // No registry changes required when items reorder.
+                break;
+        }
+    }
+
+    private static void EnsureEncryptedApiKey(WorkspaceConnection connection)
+    {
+        if (string.IsNullOrWhiteSpace(connection.ApiKey))
+        {
+            return;
+        }
+
+        if (!CredentialService.IsEncrypted(connection.ApiKey))
+        {
+            connection.ApiKey = CredentialService.Encrypt(connection.ApiKey);
+        }
     }
 }

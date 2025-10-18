@@ -219,7 +219,15 @@ public partial class CellViewModel : ObservableObject
             Value = result.Value;
         }
 
-        AppendHistory(oldValue, result.Value, Formula, Formula, reason);
+        var historyReason = reason;
+        if (!string.IsNullOrWhiteSpace(result.Diagnostics))
+        {
+            historyReason = string.IsNullOrWhiteSpace(reason)
+                ? result.Diagnostics
+                : $"{reason} • {result.Diagnostics}";
+        }
+
+        AppendHistory(oldValue, result.Value, Formula, Formula, historyReason);
         MarkAsUpdated();
     }
 

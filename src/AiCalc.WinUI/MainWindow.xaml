@@ -5,12 +5,14 @@
     xmlns:local="using:AiCalc"
     xmlns:models="using:AiCalc.Models"
     xmlns:services="using:AiCalc.Services"
+    xmlns:converters="using:AiCalc.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
     <Page.Resources>
-        <!-- Cell Context Menu (Phase 5 Task 16) -->
+    <!-- Cell Context Menu (Phase 5 Task 16) -->
+    <converters:BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
         <MenuFlyout x:Key="CellContextMenu">
             <MenuFlyoutItem Text="✂️ Cut" Click="Cut_Click" />
             <MenuFlyoutItem Text="📋 Copy" Click="Copy_Click" />
@@ -245,15 +247,32 @@
                                                       SelectionMode="Single"
                                                       ItemClick="FunctionAutocomplete_ItemClick"
                                                       IsItemClickEnabled="True"
-                                                      MinWidth="200">
+                                                      MinWidth="240">
                                                 <ListView.ItemTemplate>
                                                     <DataTemplate x:DataType="models:FunctionSuggestion">
-                                                        <StackPanel Padding="8,4">
-                                                            <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" />
-                                                            <TextBlock Text="{x:Bind Description}" 
+                                                        <StackPanel Padding="8,4" Spacing="4">
+                                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                                <TextBlock Text="{Binding CategoryGlyph}"
+                                                                           FontSize="13"
+                                                                           VerticalAlignment="Center"/>
+                                                                <TextBlock Text="{Binding Name}"
+                                                                           FontWeight="SemiBold"/>
+                                                                <TextBlock Text="{Binding CategoryLabel}"
+                                                                           FontSize="11"
+                                                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"/>
+                                                            </StackPanel>
+                                                            <TextBlock Text="{Binding Description}"
                                                                        FontSize="11"
                                                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                                       TextWrapping="Wrap" />
+                                                                       TextWrapping="Wrap"/>
+                                                            <TextBlock Text="{Binding TypeHint}"
+                                                                       FontSize="10"
+                                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                       Visibility="{Binding HasTypeHint, Converter={StaticResource BoolToVisibilityConverter}}"/>
+                                                            <TextBlock Text="{Binding ProviderHint}"
+                                                                       FontSize="10"
+                                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                       Visibility="{Binding HasProviderHint, Converter={StaticResource BoolToVisibilityConverter}}"/>
                                                         </StackPanel>
                                                     </DataTemplate>
                                                 </ListView.ItemTemplate>

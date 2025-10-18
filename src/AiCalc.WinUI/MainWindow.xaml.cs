@@ -9,6 +9,7 @@ using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Text;
 using System;
 using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.Linq;
 using System.Threading.Tasks;
 using Windows.Foundation;
@@ -23,7 +24,6 @@ public sealed partial class MainWindow : Page
     private CellViewModel? _selectedCell;
     private Button? _selectedButton;
     private bool _isUpdatingCell = false;
-    private List<FunctionSuggestion> _allFunctionSuggestions = new();
     private readonly Dictionary<string, FunctionDescriptor> _functionMap = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<ParameterHintItem> _parameterHints = new();
     private bool _isFormulaEditing;
@@ -58,6 +58,8 @@ public sealed partial class MainWindow : Page
         InitializeFunctionSuggestions();
         RefreshSheetTabs();
         ApplyStoredPanelWidths();
+
+        ViewModel.Settings.Connections.CollectionChanged += SettingsConnections_CollectionChanged;
         
         // Start Python SDK pipe server
         StartPipeServer();
@@ -69,28 +71,25 @@ public sealed partial class MainWindow : Page
         InspectorColumn.Width = new GridLength(Math.Max(220, ViewModel.Settings.InspectorPanelWidth));
     }
 
+    private void SettingsConnections_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        DispatcherQueue?.TryEnqueue(LoadFunctionsList);
+    }
+
     private void InitializeFunctionSuggestions()
     {
-        _allFunctionSuggestions.Clear();
         _functionMap.Clear();
 
         foreach (var func in ViewModel.FunctionRegistry.Functions)
         {
             _functionMap[func.Name] = func;
-            var paramNames = func.Parameters.Select(p => p.Name).ToList();
-            _allFunctionSuggestions.Add(new FunctionSuggestion
-            {
-                Name = func.Name,
-                Description = func.Description,
-                Signature = $"{func.Name}({string.Join(", ", paramNames)})"
-            });
         }
     }
 
     private void LoadFunctionsList()
     {
         FunctionsList.Children.Clear();
-        foreach (var func in ViewModel.FunctionRegistry.Functions)
+        foreach (var func in GetAvailableFunctions())
         {
             var border = new Border
             {
@@ -100,23 +99,249 @@ public sealed partial class MainWindow : Page
             };
             
             var stack = new StackPanel { Spacing = 4 };
-            stack.Children.Add(new TextBlock 
-            { 
-                Text = func.Name, 
+            stack.Children.Add(new TextBlock
+            {
+                Text = $"{GetCategoryGlyph(func.Category)} {func.Name}",
                 Foreground = new SolidColorBrush(Microsoft.UI.Colors.White),
                 FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
             });
-            stack.Children.Add(new TextBlock 
-            { 
-                Text = func.Description, 
+            stack.Children.Add(new TextBlock
+            {
+                Text = func.Description,
                 Foreground = new SolidColorBrush(Color.FromArgb(0xAA, 0xFF, 0xFF, 0xFF)),
                 FontSize = 12,
                 TextWrapping = TextWrapping.Wrap
             });
+
+            if (func.Category == FunctionCategory.AI)
+            {
+                var providerHint = BuildProviderHint(func, App.AIServices.GetDefaultConnection());
+                if (!string.IsNullOrWhiteSpace(providerHint))
+                {
+                    stack.Children.Add(new TextBlock
+                    {
+                        Text = providerHint,
+                        Foreground = new SolidColorBrush(Color.FromArgb(0x88, 0xFF, 0xFF, 0xFF)),
+                        FontSize = 11
+                    });
+                }
+            }
             
             border.Child = stack;
             FunctionsList.Children.Add(border);
         }
+    }
+
+    private IEnumerable<FunctionDescriptor> GetAvailableFunctions()
+    {
+        var connection = App.AIServices.GetDefaultConnection();
+        foreach (var descriptor in ViewModel.FunctionRegistry.Functions)
+        {
+            if (descriptor.Category == FunctionCategory.AI && !IsFunctionSupportedByConnection(descriptor, connection))
+            {
+                continue;
+            }
+
+            yield return descriptor;
+        }
+    }
+
+    private static string GetCategoryGlyph(FunctionCategory category)
+    {
+        return category switch
+        {
+            FunctionCategory.Math => "∑",
+            FunctionCategory.Text => "✂",
+            FunctionCategory.DateTime => "🕒",
+            FunctionCategory.File => "📄",
+            FunctionCategory.Directory => "📁",
+            FunctionCategory.Table => "📊",
+            FunctionCategory.Image => "🖼",
+            FunctionCategory.Video => "🎬",
+            FunctionCategory.Pdf => "📕",
+            FunctionCategory.Data => "📈",
+            FunctionCategory.AI => "🤖",
+            FunctionCategory.Contrib => "✨",
+            _ => "ƒ"
+        };
+    }
+
+    private static string BuildProviderHint(FunctionDescriptor descriptor, WorkspaceConnection? connection)
+    {
+        if (descriptor.Category != FunctionCategory.AI || connection == null)
+        {
+            return string.Empty;
+        }
+
+        var providerLabel = connection.Provider switch
+        {
+            "AzureOpenAI" => "Azure OpenAI",
+            "OpenAI" => "OpenAI",
+            "Ollama" => "Ollama",
+            _ => connection.Provider
+        };
+
+        var model = descriptor.Name switch
+        {
+            "IMAGE_TO_CAPTION" => connection.VisionModel ?? connection.Model,
+            "TEXT_TO_IMAGE" => connection.ImageModel,
+            _ => connection.Model
+        };
+
+        if (string.IsNullOrWhiteSpace(model))
+        {
+            return providerLabel;
+        }
+
+        return $"{providerLabel} · {model}";
+    }
+
+    private IEnumerable<FunctionSuggestion> GetContextualSuggestions(string searchText)
+    {
+        var connection = App.AIServices.GetDefaultConnection();
+        var currentCellType = _formulaEditTargetCell?.Value.ObjectType ?? _selectedCell?.Value.ObjectType ?? CellObjectType.Text;
+        currentCellType = NormalizeCellObjectType(currentCellType);
+
+        foreach (var descriptor in ViewModel.FunctionRegistry.Functions)
+        {
+            if (!descriptor.Name.StartsWith(searchText, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (descriptor.Category == FunctionCategory.AI)
+            {
+                if (!IsFunctionSupportedByConnection(descriptor, connection))
+                {
+                    continue;
+                }
+
+                if (!IsFunctionRelevantForCellType(descriptor, currentCellType))
+                {
+                    continue;
+                }
+            }
+
+            yield return CreateSuggestion(descriptor, connection);
+        }
+    }
+
+    private FunctionSuggestion CreateSuggestion(FunctionDescriptor descriptor, WorkspaceConnection? connection)
+    {
+        var suggestion = new FunctionSuggestion
+        {
+            Name = descriptor.Name,
+            Description = descriptor.Description,
+            Signature = BuildSignature(descriptor),
+            Category = descriptor.Category,
+            CategoryGlyph = GetCategoryGlyph(descriptor.Category),
+            CategoryLabel = descriptor.Category.ToString(),
+            TypeHint = descriptor.Category == FunctionCategory.AI ? BuildTypeHint(descriptor) : string.Empty,
+            ProviderHint = descriptor.Category == FunctionCategory.AI ? BuildProviderHint(descriptor, connection) : string.Empty
+        };
+
+        return suggestion;
+    }
+
+    private static string BuildSignature(FunctionDescriptor descriptor)
+    {
+        if (descriptor.Parameters.Count == 0)
+        {
+            return $"{descriptor.Name}()";
+        }
+
+        var paramNames = descriptor.Parameters.Select(p => p.Name);
+        return $"{descriptor.Name}({string.Join(", ", paramNames)})";
+    }
+
+    private static string BuildTypeHint(FunctionDescriptor descriptor)
+    {
+        if (descriptor.Parameters.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        var firstParam = descriptor.Parameters[0];
+        var labels = firstParam.AcceptableTypes
+            .Select(FormatCellObjectType)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (labels.Length == 0)
+        {
+            return string.Empty;
+        }
+
+        return $"Input: {string.Join(" / ", labels)}";
+    }
+
+    private static string FormatCellObjectType(CellObjectType type)
+    {
+        return type switch
+        {
+            CellObjectType.Text => "Text",
+            CellObjectType.Number => "Number",
+            CellObjectType.Image => "Image",
+            CellObjectType.Video => "Video",
+            CellObjectType.Audio => "Audio",
+            CellObjectType.Directory => "Directory",
+            CellObjectType.File => "File",
+            CellObjectType.Table => "Table",
+            CellObjectType.Json => "JSON",
+            CellObjectType.Pdf => "PDF",
+            CellObjectType.CodePython => "Python Code",
+            CellObjectType.CodeCSharp => "C# Code",
+            CellObjectType.CodeJavaScript => "JavaScript Code",
+            CellObjectType.CodeTypeScript => "TypeScript Code",
+            CellObjectType.CodeHtml => "HTML",
+            CellObjectType.CodeCss => "CSS",
+            _ => type.ToString()
+        };
+    }
+
+    private static bool IsFunctionSupportedByConnection(FunctionDescriptor descriptor, WorkspaceConnection? connection)
+    {
+        if (descriptor.Category != FunctionCategory.AI)
+        {
+            return true;
+        }
+
+        if (connection == null || !connection.IsActive)
+        {
+            return false;
+        }
+
+        return descriptor.Name switch
+        {
+            "IMAGE_TO_CAPTION" => !string.IsNullOrWhiteSpace(connection.VisionModel ?? connection.Model),
+            "TEXT_TO_IMAGE" => !string.IsNullOrWhiteSpace(connection.ImageModel),
+            _ => !string.IsNullOrWhiteSpace(connection.Model)
+        };
+    }
+
+    private static bool IsFunctionRelevantForCellType(FunctionDescriptor descriptor, CellObjectType cellType)
+    {
+        if (descriptor.Parameters.Count == 0)
+        {
+            return true;
+        }
+
+        var normalizedCellType = NormalizeCellObjectType(cellType);
+        var firstParam = descriptor.Parameters[0];
+        return firstParam.AcceptableTypes
+            .Select(NormalizeCellObjectType)
+            .Contains(normalizedCellType);
+    }
+
+    private static CellObjectType NormalizeCellObjectType(CellObjectType type)
+    {
+        return type switch
+        {
+            CellObjectType.Empty => CellObjectType.Text,
+            CellObjectType.Markdown => CellObjectType.Text,
+            CellObjectType.Script => CellObjectType.Text,
+            _ => type
+        };
     }
 
     private void RefreshSheetTabs()
@@ -659,10 +884,9 @@ public sealed partial class MainWindow : Page
             return;
         }
         
-        // Filter suggestions based on what's been typed
+        // Filter suggestions based on what's been typed and current context
         var searchText = formulaText.ToUpperInvariant();
-        var matchingSuggestions = _allFunctionSuggestions
-            .Where(f => f.Name.ToUpperInvariant().StartsWith(searchText))
+        var matchingSuggestions = GetContextualSuggestions(searchText)
             .Take(10)
             .ToList();
         
@@ -1027,6 +1251,16 @@ public sealed partial class MainWindow : Page
             var result = await _selectedCell.EvaluateAsync();
             if (result != null)
             {
+                if (result.AiResponse != null)
+                {
+                    result = await ShowAIPreviewAsync(_selectedCell, result);
+                    if (result == null)
+                    {
+                        ViewModel.StatusMessage = "AI result cancelled";
+                        return;
+                    }
+                }
+
                 await HandleEvaluationResultAsync(_selectedCell, result);
             }
         }
@@ -1074,11 +1308,113 @@ public sealed partial class MainWindow : Page
             var affected = sheet.ApplySpill(cell, result.SpillRange!);
             ViewModel.StatusMessage = $"Spilled into {affected.Count + 1} cell(s) from {cell.DisplayLabel}";
         }
+        else if (!string.IsNullOrWhiteSpace(result.Diagnostics))
+        {
+            ViewModel.StatusMessage = result.Diagnostics;
+        }
 
         if (sheet != null)
         {
             BuildSpreadsheetGrid(sheet);
         }
+    }
+
+    private async Task<FunctionExecutionResult?> ShowAIPreviewAsync(CellViewModel cell, FunctionExecutionResult initialResult)
+    {
+        var current = initialResult;
+
+        while (current != null)
+        {
+            var response = current.AiResponse;
+            var previewText = current.Value.DisplayValue ?? current.Value.SerializedValue ?? string.Empty;
+
+            var panel = new StackPanel
+            {
+                Spacing = 12,
+                MaxWidth = 460
+            };
+
+            panel.Children.Add(new TextBlock
+            {
+                Text = previewText,
+                TextWrapping = TextWrapping.WrapWholeWords
+            });
+
+            var metaLines = new List<string>();
+            if (!string.IsNullOrWhiteSpace(current.Diagnostics))
+            {
+                metaLines.Add(current.Diagnostics);
+            }
+
+            if (response != null)
+            {
+                if (response.Metadata != null && response.Metadata.TryGetValue("model", out var model) && model != null)
+                {
+                    metaLines.Add($"Model: {model}");
+                }
+
+                if (response.TokensUsed > 0)
+                {
+                    metaLines.Add($"Tokens used: {response.TokensUsed}");
+                }
+
+                if (response.Duration > TimeSpan.Zero)
+                {
+                    metaLines.Add($"Duration: {response.Duration.TotalSeconds:F1}s");
+                }
+            }
+
+            if (metaLines.Count > 0)
+            {
+                panel.Children.Add(new TextBlock
+                {
+                    Text = string.Join(" • ", metaLines),
+                    FontSize = 12,
+                    Foreground = new SolidColorBrush(Microsoft.UI.Colors.Gray)
+                });
+            }
+
+            var dialog = new ContentDialog
+            {
+                Title = "AI Result Preview",
+                Content = new ScrollViewer
+                {
+                    Content = panel,
+                    VerticalScrollMode = ScrollMode.Auto,
+                    HorizontalScrollMode = ScrollMode.Disabled,
+                    MaxHeight = 360
+                },
+                PrimaryButtonText = "Apply to Cell",
+                SecondaryButtonText = "Regenerate",
+                CloseButtonText = "Cancel",
+                DefaultButton = ContentDialogButton.Primary,
+                XamlRoot = Content.XamlRoot
+            };
+
+            var decision = await dialog.ShowAsync();
+
+            if (decision == ContentDialogResult.Primary)
+            {
+                return current;
+            }
+
+            if (decision == ContentDialogResult.Secondary)
+            {
+                var regenerated = await cell.EvaluateAsync();
+                if (regenerated == null)
+                {
+                    return null;
+                }
+
+                current = regenerated;
+                continue;
+            }
+
+            // Cancel pressed
+            return null;
+        }
+
+        return null;
     }
 
     private async void SettingsButton_Click(object sender, RoutedEventArgs e)

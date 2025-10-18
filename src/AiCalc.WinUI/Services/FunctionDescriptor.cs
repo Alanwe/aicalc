@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using AiCalc.Models;
+using AiCalc.Services.AI;
 using AiCalc.ViewModels;
 
 namespace AiCalc.Services;
@@ -127,7 +128,8 @@ public record FunctionExecutionResult(
     CellValue Value,
     string? Diagnostics = null,
     CellValue[,]? SpillRange = null,
-    IReadOnlyList<CellAddress>? ReferencedCells = null)
+    IReadOnlyList<CellAddress>? ReferencedCells = null,
+    AIResponse? AiResponse = null)
 {
     public bool HasSpill => SpillRange is { Length: > 0 };
 }

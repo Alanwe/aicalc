@@ -12,9 +12,9 @@ public class WorkspaceConnection
     public string Name { get; set; } = "Local Runtime";
 
     /// <summary>
-    /// Provider type: "AzureOpenAI", "Ollama", "OpenAI", "Local"
+    /// Provider key: "AzureOpenAI", "Ollama" ("OpenAI" reserved for future support)
     /// </summary>
-    public string Provider { get; set; } = "Local";
+    public string Provider { get; set; } = "AzureOpenAI";
 
     public string Endpoint { get; set; } = "http://localhost";
 
@@ -89,4 +89,33 @@ public class WorkspaceConnection
     /// Error from last test (if any)
     /// </summary>
     public string? LastTestError { get; set; }
+
+    /// <summary>
+    /// Create a deep copy of this connection instance.
+    /// </summary>
+    public WorkspaceConnection Clone()
+    {
+        return new WorkspaceConnection
+        {
+            Id = Id,
+            Name = Name,
+            Provider = Provider,
+            Endpoint = Endpoint,
+            ApiKey = ApiKey,
+            Model = Model,
+            Deployment = Deployment,
+            VisionModel = VisionModel,
+            ImageModel = ImageModel,
+            IsDefault = IsDefault,
+            TimeoutSeconds = TimeoutSeconds,
+            MaxRetries = MaxRetries,
+            Temperature = Temperature,
+            TotalTokensUsed = TotalTokensUsed,
+            TotalRequests = TotalRequests,
+            LastUsed = LastUsed,
+            IsActive = IsActive,
+            LastTested = LastTested,
+            LastTestError = LastTestError
+        };
+    }
 }
