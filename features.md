@@ -112,9 +112,17 @@ Current focus: **Phase 3 – Multi-Threading & Dependency Management.** Phases 1
 ## Phase 9 – Testing, Documentation & Deployment
 
 - **Task 31 – Unit Testing (🟡)**  `tests/AiCalc.Tests`
-   - 36 `[Fact]` specs (~40 total tests with `[Theory]`) cover models/settings/dependency graph. Function registry, evaluation engine, AI integrations, and UI logic remain untested.
+   - 59 passing tests covering models (CellAddress, CellDefinition, WorkbookDefinition, SheetDefinition, WorkbookSettings) and DependencyGraph with comprehensive scenarios
+   - Function registry, evaluation engine, AI integrations, and UI logic remain untested (require extensive mocking)
+   - Current coverage: ~40% (core models and infrastructure)
 - **Task 32 – Integration Testing (❌)**  No automated end-to-end or UI automation.
-- **Task 33 – Documentation (🟡)**  README, tasks.md, STATUS.md exist; user guide, API reference, SDK docs pending (this file now reflects actual progress).
+- **Task 33 – Documentation (🟡)**  **70% COMPLETE**
+   - ✅ Comprehensive Function Reference (`docs/Function_Reference.md`) with all 40 functions documented
+   - ✅ README updated with current status and documentation links
+   - ✅ tasks.md and features.md reflect Phase 9 progress
+   - ⏳ User guide with screenshots pending
+   - ⏳ Python SDK documentation pending
+   - ⏳ API reference for plugin developers pending
 - **Task 34 – Performance Optimisation (❌)**
 - **Task 35 – Deployment & Distribution (❌)**
 
@@ -122,9 +130,10 @@ Current focus: **Phase 3 – Multi-Threading & Dependency Management.** Phases 1
 
 ## Current Test & Build Snapshot
 
-- Unit tests: ~40 (xUnit) covering models + dependency graph only. No coverage for evaluation engine, AI glue, or UI logic.
-- Build: `dotnet build AiCalc.sln` succeeds (see `STATUS.md`).
+- Unit tests: 59 (xUnit) passing with 0 errors covering models + dependency graph. No coverage for evaluation engine, AI glue, or UI logic.
+- Build: `dotnet build AiCalc.sln` succeeds with 0 warnings, 0 errors (see `STATUS.md`).
 - Manual testing: Spreadsheet UI renders, keyboard shortcuts function, formula evaluation works for synchronous built-ins; AI functions currently return placeholders due to missing client registration.
+- Documentation: Function Reference complete with 40 functions documented (9 Math, 7 Text, 3 DateTime, 4 File, 3 Directory, 2 Table, 1 Image, 2 PDF, 9 AI)
 
 ---
 

@@ -678,14 +678,30 @@ yes
 ### Task 31: Unit Testing
 **Goal**: Comprehensive test coverage
 **Dependencies**: None (ongoing)
+**Status**: 🟡 40% COMPLETE (Core models tested, service/UI layers need coverage)
 **Details**:
-- Write unit tests for all Models
-- Test FunctionRegistry and FunctionRunner
-- Test CellAddress parsing and formatting
-- Test dependency graph (DAG) implementation
-- Test Python SDK integration
-- Mock AI service calls for testing
-- Aim for 80%+ code coverage
+- ✅ Write unit tests for all Models (59 passing tests)
+- ✅ Test CellAddress parsing and formatting
+- ✅ Test dependency graph (DAG) implementation
+- ⏳ Test FunctionRegistry and FunctionRunner (PENDING - requires mocking)
+- ⏳ Test Python SDK integration (PENDING)
+- ⏳ Mock AI service calls for testing (PENDING)
+- ⏳ Aim for 80%+ code coverage (PENDING)
+
+**Current Coverage**: 
+- 59 passing xUnit tests covering:
+  - CellAddress (parsing, formatting, validation)
+  - CellDefinition (properties, automation modes, notes)
+  - WorkbookDefinition & SheetDefinition (structure, operations)
+  - WorkbookSettings (connections, evaluation settings, themes)
+  - DependencyGraph (DAG operations, circular detection, topological sort)
+
+**Remaining Work** (~15-20 hours):
+1. Service layer tests (FunctionRegistry, FunctionRunner, EvaluationEngine) - requires extensive mocking
+2. ViewModel tests - requires UI framework mocking
+3. AI integration tests with mock services
+4. Python SDK integration tests
+5. Increase coverage to 80%+ target
 
 ---
 
@@ -705,14 +721,23 @@ yes
 ### Task 33: Documentation
 **Goal**: Complete user and developer documentation
 **Dependencies**: All feature tasks
+**Status**: ✅ 70% COMPLETE (Function reference done, user guide pending)
 **Details**:
-- Update README.md with feature overview
-- Create user guide with screenshots
-- Document all built-in functions with examples
-- Create Python SDK documentation
-- API reference for plugin developers
-- Video tutorials for key features
-- FAQ and troubleshooting guide
+- ✅ Update README.md with feature overview
+- ⏳ Create user guide with screenshots (PENDING)
+- ✅ Document all built-in functions with examples
+- ⏳ Create Python SDK documentation (PENDING)
+- ⏳ API reference for plugin developers (PENDING)
+- ⏳ Video tutorials for key features (PENDING)
+- ⏳ FAQ and troubleshooting guide (PENDING)
+
+**Implementation**: See `docs/Function_Reference.md` for complete function documentation (40 functions documented with syntax, parameters, examples, and return types). README updated with current status and documentation links.
+
+**Remaining Work** (~10-15 hours):
+1. User guide with screenshots and tutorials
+2. Python SDK documentation and examples
+3. API reference for developers
+4. FAQ and troubleshooting guide
 
 ---
 

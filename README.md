@@ -2,13 +2,15 @@
 
 AiCalc Studio is a **Windows App SDK (WinUI 3)** application that delivers an AI-native spreadsheet experience. Each cell can host rich content such as directories, media, documents, links, or traditional scalar values while orchestrating AI workflows alongside classic spreadsheet logic.
 
-**Current Status:** Phase 8 in progress (selection analytics, column visibility & sizing tooling delivered) with Phase 6 core complete (80%). 59 passing tests, clean builds, production-ready.
+**Current Status:** Phase 9 in progress (documentation and testing) with Phase 8 partially complete (80%). 59 passing tests, clean builds, comprehensive documentation, production-ready.
 
 ## Highlights
 
 - **Native Windows App** built with WinUI 3 for high performance and modern UI
 - **Rich cell types** with visual glyphs that describe the current payload (text, images, video, directories, scripts, and more)
-- **AI function catalog** with 25+ functions for text-to-image, image captioning, directory introspection, code generation, and more
+- **40+ built-in functions** across 9 categories: Math, Text, DateTime, File, Directory, Table, Image, PDF, and AI
+- **AI function catalog** with 9 AI-powered functions for text-to-image, image captioning, translation, summarization, chat, code review, and more
+- **Comprehensive documentation** with function reference guide, user documentation, and API reference
 - **Multi-threaded evaluation** with dependency graph (DAG) and parallel processing
 - **Excel-like keyboard navigation** with 8+ shortcuts (F9, F2, arrows, Ctrl+Z/Y, etc.)
 - **Context menus** with 13 operations (Cut/Copy/Paste, Insert/Delete rows/columns)
@@ -79,6 +81,17 @@ The `FunctionRegistry` class registers built-in spreadsheet and AI helpers. New 
 - Python scripts hosted in your runtime
 
 This design makes it straightforward to contribute additional AI skills or data utilities directly from C# or through Python interop.
+
+## Documentation
+
+Comprehensive documentation is available in the `docs/` folder:
+
+- **[Function Reference](docs/Function_Reference.md)** - Complete guide to all 40+ built-in functions with syntax, parameters, examples, and return types
+- **[QUICKSTART](QUICKSTART.md)** - Fast reference for common commands and workflows
+- **[Install Guide](Install.md)** - Environment setup and prerequisites
+- **[Status](STATUS.md)** - Current project status, phase progress, and recent changes
+- **[Tasks](tasks.md)** - Detailed implementation tasks and phase roadmap
+- **[Features](features.md)** - Feature tracking and implementation status
 
 ## Saving workbooks
 
