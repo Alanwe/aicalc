@@ -4,6 +4,8 @@
 **Session:** Implementation and Testing Phase  
 **Status:** ✅ Significant Progress Made
 
+> **Oct 19, 2025 Update:** Phase 8 ergonomics underway — multi-cell selection analytics, column width tooling, and row/column hide-unhide controls delivered. See `docs/Phase8_Implementation.md` for details.
+
 ---
 
 ## What Was Accomplished

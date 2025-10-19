@@ -778,7 +778,7 @@ public void AppendHistory(string reason, string? details = null)
 ---
 
 #### `RowViewModel.cs` (45 lines)
-**Purpose**: Row-level operations (future: row height, hide/show)
+**Purpose**: Row-level operations (row height pending; hide/unhide supported)
 
 **Properties**:
 ```csharp

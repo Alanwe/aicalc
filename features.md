@@ -103,8 +103,8 @@ Current focus: **Phase 3 – Multi-Threading & Dependency Management.** Phases 1
 - **Task 23 – Cell Inspector Tabs (❌)**  Inspector still a single column, no tabbed layout.
 - **Task 24 – Automation System (🟡)**  Basic automation modes exist (`CellViewModel.AutomationMode`), but there are no triggers/flows/UI.
 - **Task 25 – File Format & Persistence (🟡)**  `WorkbookViewModel.SaveAsync/LoadAsync` handle JSON. Binary, autosave, CSV/XLSX import/export remain outstanding.
-- **Task 26 – Row/Column Operations (🟡)**  Insert/delete implemented; hide/show, resizing, freezing, grouping pending.
-- **Task 27 – Selection & Range Operations (❌)**  No multi-select, fill, or formula propagation yet.
+- **Task 26 – Row/Column Operations (🟡)**  Insert/delete plus persistent column widths with auto-fit/custom/reset and hide/unhide tooling; drag resize, freezing, grouping still pending.
+- **Task 27 – Selection & Range Operations (🟡)**  Shift/Ctrl multi-select with status bar analytics and inspector updates delivered; drag marquee, fill down/right, format painter, range find/replace still outstanding.
 - **Task 28 – Themes & Customisation (🟡)**  Application & cell-state themes selectable; there is no custom colour editor beyond presets.
 - **Task 29 – Community Functions (❌)**
 - **Task 30 – Plans & Monetisation (❌)**

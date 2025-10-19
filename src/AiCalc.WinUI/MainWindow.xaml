@@ -31,9 +31,35 @@
                 <MenuFlyoutItem Text="❌ Column" Click="DeleteColumn_Click" />
             </MenuFlyoutSubItem>
             <MenuFlyoutSeparator/>
+            <MenuFlyoutItem Text="⬇️ Fill Down" Click="FillDown_Click" />
+            <MenuFlyoutItem Text="➡️ Fill Right" Click="FillRight_Click" />
+            <MenuFlyoutSeparator/>
             <MenuFlyoutItem Text="🎨 Format Cell" Click="FormatCell_Click" />
+            <MenuFlyoutItem Text="🖌️ Format Painter" Click="FormatPainter_Click" />
             <MenuFlyoutItem Text="🔁 Extract Formula..." Click="ExtractFormula_Click" />
             <MenuFlyoutItem Text="📜 View History" Click="ViewHistory_Click" />
+        </MenuFlyout>
+
+        <!-- Column header context menu (Phase 8 Task 26) -->
+        <MenuFlyout x:Key="ColumnHeaderMenu">
+            <MenuFlyoutItem Text="🙈 Hide Column" Click="HideColumn_Click" />
+            <MenuFlyoutItem Text="🙊 Unhide All Columns" Click="UnhideAllColumns_Click" />
+            <MenuFlyoutSeparator />
+            <MenuFlyoutItem Text="❄️ Freeze Columns Here" Click="FreezeColumns_Click" />
+            <MenuFlyoutItem Text="🔥 Unfreeze All" Click="UnfreezeAll_Click" />
+            <MenuFlyoutSeparator />
+            <MenuFlyoutItem Text="↔ Auto-fit Column Width" Click="AutoFitColumn_Click" />
+            <MenuFlyoutItem Text="📏 Set Custom Width..." Click="SetColumnWidth_Click" />
+            <MenuFlyoutSeparator />
+            <MenuFlyoutItem Text="⟲ Reset to Default" Click="ResetColumnWidth_Click" />
+        </MenuFlyout>
+
+        <MenuFlyout x:Key="RowHeaderMenu">
+            <MenuFlyoutItem Text="🙈 Hide Row" Click="HideRow_Click" />
+            <MenuFlyoutItem Text="🙊 Unhide All Rows" Click="UnhideAllRows_Click" />
+            <MenuFlyoutSeparator />
+            <MenuFlyoutItem Text="❄️ Freeze Rows Here" Click="FreezeRows_Click" />
+            <MenuFlyoutItem Text="🔥 Unfreeze All" Click="UnfreezeAll_Click" />
         </MenuFlyout>
     </Page.Resources>
 
@@ -386,6 +412,11 @@
                 <TextBlock Text="|" Foreground="#555555" />
                 <TextBlock Text="{x:Bind ViewModel.Title, Mode=OneWay}" 
                            Foreground="#CCFFFFFF" 
+                           FontSize="12" />
+                <TextBlock Text="|" Foreground="#555555" />
+                <TextBlock x:Name="SelectionInfoText"
+                           Text="Selection: none"
+                           Foreground="#88FFFFFF"
                            FontSize="12" />
             </StackPanel>
         </Grid>

@@ -2,7 +2,7 @@
 
 AiCalc Studio is a **Windows App SDK (WinUI 3)** application that delivers an AI-native spreadsheet experience. Each cell can host rich content such as directories, media, documents, links, or traditional scalar values while orchestrating AI workflows alongside classic spreadsheet logic.
 
-**Current Status:** Phase 6 Complete (80%) - AutoSave with settings UI, CSV export/import with file pickers. 59 passing tests, clean builds, production-ready.
+**Current Status:** Phase 8 in progress (selection analytics, column visibility & sizing tooling delivered) with Phase 6 core complete (80%). 59 passing tests, clean builds, production-ready.
 
 ## Highlights
 
@@ -12,6 +12,9 @@ AiCalc Studio is a **Windows App SDK (WinUI 3)** application that delivers an AI
 - **Multi-threaded evaluation** with dependency graph (DAG) and parallel processing
 - **Excel-like keyboard navigation** with 8+ shortcuts (F9, F2, arrows, Ctrl+Z/Y, etc.)
 - **Context menus** with 13 operations (Cut/Copy/Paste, Insert/Delete rows/columns)
+- **Multi-cell selection analytics** with Shift/Ctrl workflows, inspector range labels, and live Σ/Avg metrics in the status bar
+- **Column width management** via auto-fit heuristics, custom width dialogs, and persistent per-sheet sizing
+- **Row/column visibility controls** with hide/unhide commands on header flyouts, preserving selection integrity
 - **Undo/Redo system** with 50-action history and full command pattern
 - **Settings persistence** - Window size, panel states, theme preferences saved automatically
 - **Formula syntax highlighting** with real-time tokenization and visual feedback

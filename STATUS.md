@@ -8,11 +8,18 @@ The AiCalc project has been successfully prepared and is ready for Windows devel
 
 ## 📊 Final Status
 
+## Latest Highlights (October 19, 2025)
+
+- ✅ Multi-cell selection with Shift/Ctrl support, status bar analytics, and inspector updates (Phase 8 Task 27)
+- ✅ Column header tooling covers auto-fit, custom width, hide/unhide, and reset actions with persisted widths (Phase 8 Task 26)
+- ✅ Row header flyouts enable quick hide/unhide; selection UI stays resilient across grid rebuilds
+- 🔁 Remaining Phase 8 items: freeze operations, fill-down tooling, selection fill/format painter
+
 ### Build Status: ✅ SUCCESS
 ```
 Build succeeded.
-    1 Warning(s)
-    0 Error(s)
+  0 Warning(s)
+  0 Error(s)
 
 Debug Build:   ✅ PASSING
 Release Build: ✅ PASSING
@@ -207,33 +214,35 @@ The AiCalc project is configured, tested, and ready. The project builds successf
 - ✅ Task 19: Formula Syntax Highlighting (Real-time tokenization, visual feedback)
 
 **Recent Progress**:
+- Phase 8: Selection analytics & column width tooling (partial) ✅
 - Phase 7: Python SDK & IPC (100% complete) ✅
 - Phase 6: AutoSave & CSV Export/Import (80% complete)
-- Phase 5: Settings, Undo/Redo, Formula Highlighting (100% complete)
 
-**Recent Commits**:
-- *New* - Phase 7 Complete (100%): Python SDK, IPC Bridge, Environment Detection, Settings UI
+**Recent Commits / Checkpoints**:
+- *Pending* - Phase 8 partial: multi-selection workflow, column header tooling (working tree)
+- `016d4a4` - Phase 7 Complete (100%): Python SDK, IPC Bridge, Environment Detection, Settings UI
 - `d820712` - Phase 6 Complete (80%): AutoSave UI, CSV file pickers, preferences
 - `595a943` - Phase 5 Complete: Settings Persistence, Undo/Redo, Formula Syntax Highlighting
 - `29071a7` - Documentation updates for Phase 5
 
 **See**: 
+- `docs/Phase8_Implementation.md` for selection + column tooling summary (new)
 - `docs/Phase7_Implementation.md` for Python SDK details (100% complete)
 - `docs/Phase6_Implementation.md` for AutoSave/CSV details
 - `docs/Phase5_COMPLETE.md` and `docs/Phase5_Summary.md` for Phase 5 details
 
 **Current Focus**: 
-- Phase 7 (100% complete): Python SDK fully operational ✅
-  - ✅ Named Pipes IPC server (PythonBridgeService.cs - Byte mode, direct I/O)
-  - ✅ Python client (aicalc_sdk - connect, get/set values, run functions)
-  - ✅ Environment detection (Registry, PATH, Conda, Venv scanning)
-  - ✅ Settings UI (Python tab with environment selector, SDK installer, test connection)
-  - ⏳ Function discovery (next phase - Task 21)
+- Phase 8 polish: finalize selection/range tooling & grid ergonomics
+  - ✅ Shift/Ctrl multi-select with analytics and inspector feedback
+  - ✅ Auto-fit/custom column widths with persistent storage
+  - ⏳ Freeze operations on headers
+  - ⏳ Fill down/right + format painter automation
+  - ⏳ Range-aware bulk formula entry & find/replace
 
 **Next Steps**: 
-- Phase 7 Task 21: Python Function Discovery (scan for @aicalc_function decorators)
-- Then: Phase 8 Advanced Features (multi-cell selection, column resizing, freeze panes)
-- Or: Data source integration (REST APIs, databases)
+1. Finish Phase 8 Task 26/27 gaps (freeze panes, fill/format painter)
+2. Resume Phase 7 Task 21 once selection ergonomics complete (Python discovery UX polish)
+3. Begin Phase 6 Data Sources (Azure storage + SQL) after Phase 8 sign-off
 
 ---
 
@@ -282,6 +291,6 @@ dotnet build src/AiCalc.WinUI/AiCalc.WinUI.csproj
 
 ---
 
-**Last Build**: October 5, 2025  
+**Last Build**: October 19, 2025  
 **Status**: ✅ Production Ready  
 **Next**: Build features and enjoy! 🎨

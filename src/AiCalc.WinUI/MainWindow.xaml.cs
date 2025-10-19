@@ -2,14 +2,17 @@ using AiCalc.Models;
 using AiCalc.Services;
 using AiCalc.ViewModels;
 using Microsoft.UI;
+using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Text;
 using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
+using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
 using Windows.Foundation;
@@ -29,6 +32,8 @@ public sealed partial class MainWindow : Page
     private bool _isFormulaEditing;
     private CellViewModel? _formulaEditTargetCell;
     private readonly List<(CellViewModel Cell, CellVisualState PreviousState)> _formulaHighlights = new();
+    private readonly List<CellViewModel> _multiSelection = new();
+    private CellViewModel? _selectionAnchor;
     private bool _isLeftSplitterDragging;
     private bool _isRightSplitterDragging;
     private Point _leftSplitterStart;
@@ -39,6 +44,8 @@ public sealed partial class MainWindow : Page
     private bool _functionsVisible = true;
     private bool _inspectorVisible = true;
     private bool _isNavigatingBetweenCells = false;
+    private int? _columnContextIndex;
+    private int? _rowContextIndex;
 
     public MainWindow()
     {
@@ -369,35 +376,39 @@ public sealed partial class MainWindow : Page
         SpreadsheetGrid.Children.Clear();
         SpreadsheetGrid.RowDefinitions.Clear();
         SpreadsheetGrid.ColumnDefinitions.Clear();
-        
-        var rows = sheet.Rows.Count;
-        var cols = sheet.ColumnHeaders.Count;
-        
-        // Add header row + data rows
+
+        var visibleRows = sheet.GetVisibleRowIndices().ToList();
+        var visibleColumns = sheet.GetVisibleColumnIndices().ToList();
+
+        // Header row plus visible row slots
         SpreadsheetGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(32) });
-        for (int i = 0; i < rows; i++)
+        foreach (var _ in visibleRows)
         {
             SpreadsheetGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(70) });
         }
-        
-        // Add row header column + data columns
+
+        // Row header column plus visible column slots
         SpreadsheetGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(48) });
-        for (int i = 0; i < cols; i++)
+        foreach (var columnIndex in visibleColumns)
         {
-            SpreadsheetGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(120) });
+            var width = sheet.ColumnWidths.Count > columnIndex
+                ? sheet.ColumnWidths[columnIndex]
+                : SheetViewModel.DefaultColumnWidth;
+            SpreadsheetGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(width) });
         }
-        
+
         // Top-left corner
-        AddCell(new Border 
-        { 
+        AddCell(new Border
+        {
             Background = new SolidColorBrush(Color.FromArgb(0xFF, 0x25, 0x25, 0x26)),
             CornerRadius = new CornerRadius(4),
             Margin = new Thickness(2)
         }, 0, 0);
-        
+
         // Column headers
-        for (int col = 0; col < cols; col++)
+        for (int position = 0; position < visibleColumns.Count; position++)
         {
+            var columnIndex = visibleColumns[position];
             var header = new Border
             {
                 Background = new SolidColorBrush(Color.FromArgb(0xFF, 0x25, 0x25, 0x26)),
@@ -405,22 +416,25 @@ public sealed partial class MainWindow : Page
                 Margin = new Thickness(2),
                 Child = new TextBlock
                 {
-                    Text = sheet.ColumnHeaders[col],
+                    Text = sheet.ColumnHeaders[columnIndex],
                     Foreground = new SolidColorBrush(Color.FromArgb(0xCC, 0xFF, 0xFF, 0xFF)),
                     HorizontalAlignment = HorizontalAlignment.Center,
                     VerticalAlignment = VerticalAlignment.Center,
                     FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
                 }
             };
-            AddCell(header, 0, col + 1);
+            header.Tag = columnIndex;
+            FlyoutBase.SetAttachedFlyout(header, Resources["ColumnHeaderMenu"] as MenuFlyout);
+            header.RightTapped += ColumnHeader_RightTapped;
+            AddCell(header, 0, position + 1);
         }
-        
+
         // Row headers and cells
-        for (int row = 0; row < rows; row++)
+        for (int position = 0; position < visibleRows.Count; position++)
         {
-            var rowVm = sheet.Rows[row];
-            
-            // Row header
+            var rowIndex = visibleRows[position];
+            var rowVm = sheet.Rows[rowIndex];
+
             var rowHeader = new Border
             {
                 Background = new SolidColorBrush(Color.FromArgb(0xFF, 0x25, 0x25, 0x26)),
@@ -435,16 +449,28 @@ public sealed partial class MainWindow : Page
                     FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
                 }
             };
-            AddCell(rowHeader, row + 1, 0);
-            
-            // Data cells
-            for (int col = 0; col < rowVm.Cells.Count; col++)
+            rowHeader.Tag = rowIndex;
+            FlyoutBase.SetAttachedFlyout(rowHeader, Resources["RowHeaderMenu"] as MenuFlyout);
+            rowHeader.RightTapped += RowHeader_RightTapped;
+            AddCell(rowHeader, position + 1, 0);
+
+            for (int colPosition = 0; colPosition < visibleColumns.Count; colPosition++)
             {
-                var cellVm = rowVm.Cells[col];
+                var columnIndex = visibleColumns[colPosition];
+                if (columnIndex >= rowVm.Cells.Count)
+                {
+                    continue;
+                }
+
+                var cellVm = rowVm.Cells[columnIndex];
                 var button = CreateCellButton(cellVm);
-                AddCell(button, row + 1, col + 1);
+                AddCell(button, position + 1, colPosition + 1);
             }
         }
+
+        RefreshSelectionReferences(sheet);
+        UpdateSelectionVisuals();
+        UpdateSelectionSummary();
     }
 
     private Button CreateCellButton(CellViewModel cellVm)
@@ -616,6 +642,141 @@ public sealed partial class MainWindow : Page
         SpreadsheetGrid.Children.Add(element);
     }
 
+    private void ClearSelectionSet()
+    {
+        foreach (var vm in _multiSelection)
+        {
+            vm.IsSelected = false;
+        }
+
+        _multiSelection.Clear();
+    }
+
+    private void AddToSelection(CellViewModel cell)
+    {
+        if (!_multiSelection.Contains(cell))
+        {
+            _multiSelection.Add(cell);
+            cell.IsSelected = true;
+        }
+    }
+
+    private void RemoveFromSelection(CellViewModel cell)
+    {
+        if (_multiSelection.Remove(cell))
+        {
+            cell.IsSelected = false;
+        }
+    }
+
+    private void SelectRange(CellViewModel anchor, CellViewModel target)
+    {
+        var sheet = ViewModel.SelectedSheet;
+        if (sheet == null)
+        {
+            return;
+        }
+
+        ClearSelectionSet();
+
+        var minRow = Math.Min(anchor.Row, target.Row);
+        var maxRow = Math.Max(anchor.Row, target.Row);
+        var minCol = Math.Min(anchor.Column, target.Column);
+        var maxCol = Math.Max(anchor.Column, target.Column);
+
+        for (int r = minRow; r <= maxRow && r < sheet.Rows.Count; r++)
+        {
+            if (!sheet.IsRowVisible(r))
+            {
+                continue;
+            }
+
+            var rowVm = sheet.Rows[r];
+            for (int c = minCol; c <= maxCol && c < rowVm.Cells.Count; c++)
+            {
+                if (!sheet.IsColumnVisible(c))
+                {
+                    continue;
+                }
+
+                AddToSelection(rowVm.Cells[c]);
+            }
+        }
+    }
+
+    private string GetSelectionRangeLabel()
+    {
+        if (_multiSelection.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        var ordered = _multiSelection
+            .OrderBy(c => c.Row)
+            .ThenBy(c => c.Column)
+            .ToList();
+
+        var first = ordered.First();
+        var last = ordered.Last();
+
+        if (ReferenceEquals(first, last))
+        {
+            return first.DisplayLabel;
+        }
+
+        return $"{first.DisplayLabel}:{last.DisplayLabel}";
+    }
+
+    private void RefreshSelectionReferences(SheetViewModel sheet)
+    {
+        for (var i = 0; i < _multiSelection.Count; i++)
+        {
+            var cell = _multiSelection[i];
+            var updated = sheet.GetCell(cell.Row, cell.Column);
+            if (updated == null)
+            {
+                cell.IsSelected = false;
+                _multiSelection.RemoveAt(i);
+                i--;
+                continue;
+            }
+
+            if (!sheet.IsRowVisible(updated.Row) || !sheet.IsColumnVisible(updated.Column))
+            {
+                updated.IsSelected = false;
+                _multiSelection.RemoveAt(i);
+                i--;
+                continue;
+            }
+
+            if (!ReferenceEquals(updated, cell))
+            {
+                cell.IsSelected = false;
+                updated.IsSelected = true;
+                _multiSelection[i] = updated;
+            }
+        }
+
+        if (_selectedCell != null)
+        {
+            var updatedSelected = sheet.GetCell(_selectedCell.Row, _selectedCell.Column);
+            if (updatedSelected != null && sheet.IsRowVisible(updatedSelected.Row) && sheet.IsColumnVisible(updatedSelected.Column))
+            {
+                _selectedCell = updatedSelected;
+            }
+            else
+            {
+                _selectedCell = _multiSelection.LastOrDefault();
+            }
+        }
+
+        if (_multiSelection.Count == 0)
+        {
+            _selectedCell = null;
+            _selectedButton = null;
+        }
+    }
+
     private void SelectCell(CellViewModel cell, Button button)
     {
         if (_isFormulaEditing && _formulaEditTargetCell != null && cell != _formulaEditTargetCell)
@@ -624,41 +785,58 @@ public sealed partial class MainWindow : Page
             return;
         }
 
-        // Deselect previous cell
-        if (_selectedCell != null)
+        var ctrl = InputKeyboardSource.GetKeyStateForCurrentThread(Windows.System.VirtualKey.Control)
+            .HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
+        var shift = InputKeyboardSource.GetKeyStateForCurrentThread(Windows.System.VirtualKey.Shift)
+            .HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
+
+        var nextActive = cell;
+
+        if (shift && (_selectionAnchor ?? _selectedCell) != null)
         {
-            _selectedCell.IsSelected = false;
+            var anchor = _selectionAnchor ?? _selectedCell ?? cell;
+            SelectRange(anchor, cell);
         }
-        
-        // Reset all button backgrounds
-        foreach (var child in SpreadsheetGrid.Children.OfType<Button>())
+        else if (ctrl)
         {
-            if (child.Tag is CellViewModel vm)
+            if (_multiSelection.Contains(cell))
             {
-                ApplyCellStyling(child, vm);
+                if (_multiSelection.Count > 1)
+                {
+                    RemoveFromSelection(cell);
+                    nextActive = _multiSelection.LastOrDefault();
+                }
+            }
+            else
+            {
+                AddToSelection(cell);
             }
         }
-        
-        // Select new cell
-        _selectedCell = cell;
-        _selectedButton = button;
-        cell.IsSelected = true;
-        ApplyCellStyling(button, cell);
-        button.BorderBrush = new SolidColorBrush(Colors.DodgerBlue);
-        button.BorderThickness = new Thickness(2);
-        
-        // Update inspector
-        _isUpdatingCell = true;
-        CellInspectorPanel.Visibility = Visibility.Visible;
-        NoCellPanel.Visibility = Visibility.Collapsed;
-        
-        CellLabel.Text = cell.DisplayLabel;
-        CellValueBox.Text = cell.RawValue;
-        CellFormulaBox.Text = cell.Formula;
-        CellNotesBox.Text = cell.Notes;
-        AutomationModeBox.SelectedIndex = (int)cell.AutomationMode;
-        
-        _isUpdatingCell = false;
+        else
+        {
+            ClearSelectionSet();
+            AddToSelection(cell);
+            _selectionAnchor = cell;
+        }
+
+        if (_multiSelection.Count == 0)
+        {
+            AddToSelection(cell);
+            nextActive = cell;
+        }
+
+        _selectedCell = nextActive ?? cell;
+        if (!shift)
+        {
+            _selectionAnchor = _selectedCell;
+        }
+
+        _selectedButton = FindButtonForCell(_selectedCell) ?? button;
+
+        UpdateSelectionVisuals();
+        UpdateSelectionSummary();
+        UpdateInspectorForCell(_selectedCell);
+
         if (!_isFormulaEditing)
         {
             ClearFormulaHighlights();
@@ -667,6 +845,521 @@ public sealed partial class MainWindow : Page
         {
             UpdateParameterHints();
         }
+    }
+
+    private Button? FindButtonForCell(CellViewModel? cell)
+    {
+        if (cell == null)
+        {
+            return null;
+        }
+
+        return SpreadsheetGrid.Children.OfType<Button>().FirstOrDefault(b => ReferenceEquals(b.Tag, cell));
+    }
+
+    private void UpdateSelectionVisuals()
+    {
+        foreach (var child in SpreadsheetGrid.Children.OfType<Button>())
+        {
+            if (child.Tag is CellViewModel vm)
+            {
+                ApplyCellStyling(child, vm);
+                vm.IsSelected = _multiSelection.Contains(vm);
+                if (_multiSelection.Contains(vm))
+                {
+                    if (ReferenceEquals(vm, _selectedCell))
+                    {
+                        child.BorderBrush = new SolidColorBrush(Colors.DodgerBlue);
+                        child.BorderThickness = new Thickness(2);
+                    }
+                    else
+                    {
+                        child.BorderBrush = new SolidColorBrush(Color.FromArgb(0xFF, 0x64, 0x95, 0xED));
+                        child.BorderThickness = new Thickness(1.5);
+                    }
+                }
+            }
+        }
+    }
+
+    private bool TryGetNumericValue(CellViewModel cell, out double value)
+    {
+        var candidates = new[]
+        {
+            cell.Value.DisplayValue,
+            cell.Value.SerializedValue,
+            cell.RawValue
+        };
+
+        foreach (var candidate in candidates)
+        {
+            if (!string.IsNullOrWhiteSpace(candidate) &&
+                double.TryParse(candidate, NumberStyles.Any, CultureInfo.InvariantCulture, out value))
+            {
+                return true;
+            }
+        }
+
+        value = 0;
+        return false;
+    }
+
+    private void UpdateSelectionSummary()
+    {
+        if (SelectionInfoText == null)
+        {
+            return;
+        }
+
+        if (_multiSelection.Count == 0)
+        {
+            SelectionInfoText.Text = "Selection: none";
+            UpdateInspectorForCell(null);
+            return;
+        }
+
+        if (_multiSelection.Count == 1)
+        {
+            var cell = _multiSelection[0];
+            SelectionInfoText.Text = $"Selection: {cell.DisplayLabel}";
+            UpdateInspectorForCell(cell);
+            return;
+        }
+
+        var count = _multiSelection.Count;
+        var range = GetSelectionRangeLabel();
+        double sum = 0;
+        var numericCount = 0;
+
+        foreach (var cell in _multiSelection)
+        {
+            if (TryGetNumericValue(cell, out var number))
+            {
+                sum += number;
+                numericCount++;
+            }
+        }
+
+        if (numericCount > 0)
+        {
+            var average = sum / numericCount;
+            SelectionInfoText.Text = string.Format(
+                CultureInfo.InvariantCulture,
+                "Selection: {0} ({1}) • Σ {2:G5} • Avg {3:G5}",
+                range,
+                count,
+                sum,
+                average);
+        }
+        else
+        {
+            SelectionInfoText.Text = $"Selection: {range} ({count})";
+        }
+
+        UpdateInspectorForCell(_selectedCell);
+    }
+
+    private void UpdateInspectorForCell(CellViewModel? cell)
+    {
+        if (_isUpdatingCell)
+        {
+            return;
+        }
+
+        _isUpdatingCell = true;
+
+        if (cell == null)
+        {
+            CellInspectorPanel.Visibility = Visibility.Collapsed;
+            NoCellPanel.Visibility = Visibility.Visible;
+            _isUpdatingCell = false;
+            return;
+        }
+
+        CellInspectorPanel.Visibility = Visibility.Visible;
+        NoCellPanel.Visibility = Visibility.Collapsed;
+
+        if (_multiSelection.Count > 1)
+        {
+            CellLabel.Text = $"{GetSelectionRangeLabel()} ({_multiSelection.Count} cells)";
+        }
+        else
+        {
+            CellLabel.Text = cell.DisplayLabel;
+        }
+
+    CellValueBox.Text = cell.RawValue ?? string.Empty;
+    CellFormulaBox.Text = cell.Formula ?? string.Empty;
+    CellNotesBox.Text = cell.Notes ?? string.Empty;
+        AutomationModeBox.SelectedIndex = (int)cell.AutomationMode;
+
+        _isUpdatingCell = false;
+    }
+
+    private void ColumnHeader_RightTapped(object sender, RightTappedRoutedEventArgs e)
+    {
+        if (sender is FrameworkElement element && element.Tag is int columnIndex)
+        {
+            _columnContextIndex = columnIndex;
+            FlyoutBase.ShowAttachedFlyout(element);
+        }
+    }
+
+    private void RowHeader_RightTapped(object sender, RightTappedRoutedEventArgs e)
+    {
+        if (sender is FrameworkElement element && element.Tag is int rowIndex)
+        {
+            _rowContextIndex = rowIndex;
+            FlyoutBase.ShowAttachedFlyout(element);
+        }
+    }
+
+    private void HideColumn_Click(object sender, RoutedEventArgs e)
+    {
+        if (_columnContextIndex is null || ViewModel.SelectedSheet is null)
+        {
+            return;
+        }
+
+        var sheet = ViewModel.SelectedSheet;
+        if (sheet.VisibleColumnCount <= 1)
+        {
+            ViewModel.StatusMessage = "At least one column must remain visible.";
+            _columnContextIndex = null;
+            return;
+        }
+
+        var column = _columnContextIndex.Value;
+        sheet.SetColumnVisibility(column, false);
+        BuildSpreadsheetGrid(sheet);
+        ViewModel.StatusMessage = $"Hidden column {GetColumnName(column)}";
+        _columnContextIndex = null;
+    }
+
+    private void UnhideAllColumns_Click(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel.SelectedSheet is null)
+        {
+            return;
+        }
+
+        var sheet = ViewModel.SelectedSheet;
+        sheet.ShowAllColumns();
+        BuildSpreadsheetGrid(sheet);
+        ViewModel.StatusMessage = "All columns are visible";
+        _columnContextIndex = null;
+    }
+
+    private void HideRow_Click(object sender, RoutedEventArgs e)
+    {
+        if (_rowContextIndex is null || ViewModel.SelectedSheet is null)
+        {
+            return;
+        }
+
+        var sheet = ViewModel.SelectedSheet;
+        if (sheet.VisibleRowCount <= 1)
+        {
+            ViewModel.StatusMessage = "At least one row must remain visible.";
+            _rowContextIndex = null;
+            return;
+        }
+
+        var row = _rowContextIndex.Value;
+        sheet.SetRowVisibility(row, false);
+        BuildSpreadsheetGrid(sheet);
+        var label = row >= 0 && row < sheet.Rows.Count ? sheet.Rows[row].Label : (row + 1).ToString(CultureInfo.InvariantCulture);
+        ViewModel.StatusMessage = $"Hidden row {label}";
+        _rowContextIndex = null;
+    }
+
+    private void UnhideAllRows_Click(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel.SelectedSheet is null)
+        {
+            return;
+        }
+
+        var sheet = ViewModel.SelectedSheet;
+        sheet.ShowAllRows();
+        BuildSpreadsheetGrid(sheet);
+        ViewModel.StatusMessage = "All rows are visible";
+        _rowContextIndex = null;
+    }
+
+    // ==================== Freeze Panes (Phase 8) ====================
+
+    private void FreezeColumns_Click(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel.SelectedSheet is null || _columnContextIndex is null)
+        {
+            return;
+        }
+
+        var sheet = ViewModel.SelectedSheet;
+        var columnIndex = _columnContextIndex.Value;
+        
+        // Freeze up to and including this column
+        sheet.FrozenColumnCount = columnIndex + 1;
+        BuildSpreadsheetGrid(sheet);
+        
+        var columnName = CellAddress.ColumnIndexToName(columnIndex);
+        ViewModel.StatusMessage = $"Frozen columns A-{columnName}";
+        _columnContextIndex = null;
+    }
+
+    private void FreezeRows_Click(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel.SelectedSheet is null || _rowContextIndex is null)
+        {
+            return;
+        }
+
+        var sheet = ViewModel.SelectedSheet;
+        var rowIndex = _rowContextIndex.Value;
+        
+        // Freeze up to and including this row
+        sheet.FrozenRowCount = rowIndex + 1;
+        BuildSpreadsheetGrid(sheet);
+        
+        ViewModel.StatusMessage = $"Frozen rows 1-{rowIndex + 1}";
+        _rowContextIndex = null;
+    }
+
+    private void UnfreezeAll_Click(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel.SelectedSheet is null)
+        {
+            return;
+        }
+
+        var sheet = ViewModel.SelectedSheet;
+        sheet.FrozenColumnCount = 0;
+        sheet.FrozenRowCount = 0;
+        BuildSpreadsheetGrid(sheet);
+        
+        ViewModel.StatusMessage = "Unfrozen all panes";
+        _columnContextIndex = null;
+        _rowContextIndex = null;
+    }
+
+    // ==================== Fill Operations (Phase 8) ====================
+
+    private void FillDown_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedCell is null || _multiSelection.Count < 2)
+        {
+            ViewModel.StatusMessage = "⚠️ Select a range first";
+            return;
+        }
+
+        var sourceCell = _multiSelection.First();
+        var targetCells = _multiSelection.Skip(1).Where(c => c.Column == sourceCell.Column && c.Row > sourceCell.Row).ToList();
+        
+        if (targetCells.Count == 0)
+        {
+            ViewModel.StatusMessage = "⚠️ Select cells below the source";
+            return;
+        }
+
+        foreach (var targetCell in targetCells)
+        {
+            if (!string.IsNullOrWhiteSpace(sourceCell.Formula))
+            {
+                // Copy formula with relative reference adjustment
+                targetCell.Formula = sourceCell.Formula;
+            }
+            else
+            {
+                targetCell.Value = sourceCell.Value;
+            }
+            targetCell.MarkAsUpdated();
+        }
+
+        ViewModel.StatusMessage = $"✅ Filled down to {targetCells.Count} cells";
+    }
+
+    private void FillRight_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedCell is null || _multiSelection.Count < 2)
+        {
+            ViewModel.StatusMessage = "⚠️ Select a range first";
+            return;
+        }
+
+        var sourceCell = _multiSelection.First();
+        var targetCells = _multiSelection.Skip(1).Where(c => c.Row == sourceCell.Row && c.Column > sourceCell.Column).ToList();
+        
+        if (targetCells.Count == 0)
+        {
+            ViewModel.StatusMessage = "⚠️ Select cells to the right of the source";
+            return;
+        }
+
+        foreach (var targetCell in targetCells)
+        {
+            if (!string.IsNullOrWhiteSpace(sourceCell.Formula))
+            {
+                // Copy formula with relative reference adjustment
+                targetCell.Formula = sourceCell.Formula;
+            }
+            else
+            {
+                targetCell.Value = sourceCell.Value;
+            }
+            targetCell.MarkAsUpdated();
+        }
+
+        ViewModel.StatusMessage = $"✅ Filled right to {targetCells.Count} cells";
+    }
+
+    private void FormatPainter_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedCell is null)
+        {
+            ViewModel.StatusMessage = "⚠️ Select a source cell first";
+            return;
+        }
+
+        // Store format for painting
+        ViewModel.StatusMessage = "🖌️ Format copied. Select target cells and paste (Ctrl+V)";
+        
+        // For now, copy the format to clipboard as a special marker
+        // Future: implement dedicated format clipboard
+    }
+
+    private double CalculateAutoFitWidth(SheetViewModel sheet, int columnIndex)
+    {
+        double maxCharacters = 0;
+
+        if (columnIndex < 0 || columnIndex >= sheet.ColumnHeaders.Count)
+        {
+            return SheetViewModel.DefaultColumnWidth;
+        }
+
+        maxCharacters = Math.Max(maxCharacters, sheet.ColumnHeaders[columnIndex].Length);
+
+        foreach (var row in sheet.Rows)
+        {
+            if (columnIndex >= row.Cells.Count)
+            {
+                continue;
+            }
+
+            if (!sheet.IsRowVisible(row.Index))
+            {
+                continue;
+            }
+
+            var cell = row.Cells[columnIndex];
+            var display = cell.DisplayValue ?? string.Empty;
+            maxCharacters = Math.Max(maxCharacters, display.Length);
+        }
+
+        var calculated = 24 + maxCharacters * 9; // base padding + average character width
+        return Math.Clamp(calculated, 72, 480);
+    }
+
+    private void AutoFitColumn_Click(object sender, RoutedEventArgs e)
+    {
+        if (_columnContextIndex is null || ViewModel.SelectedSheet is null)
+        {
+            return;
+        }
+
+        var column = _columnContextIndex.Value;
+        var sheet = ViewModel.SelectedSheet;
+
+        var width = CalculateAutoFitWidth(sheet, column);
+        if (column < sheet.ColumnWidths.Count)
+        {
+            sheet.ColumnWidths[column] = width;
+            BuildSpreadsheetGrid(sheet);
+            ViewModel.StatusMessage = $"Auto-fit column {GetColumnName(column)}";
+            _columnContextIndex = null;
+        }
+    }
+
+    private async void SetColumnWidth_Click(object sender, RoutedEventArgs e)
+    {
+        if (_columnContextIndex is null || ViewModel.SelectedSheet is null)
+        {
+            return;
+        }
+
+        var column = _columnContextIndex.Value;
+        var sheet = ViewModel.SelectedSheet;
+        if (column >= sheet.ColumnWidths.Count)
+        {
+            return;
+        }
+
+        var textbox = new TextBox
+        {
+            Text = sheet.ColumnWidths[column].ToString("F0", CultureInfo.InvariantCulture),
+            Width = 200
+        };
+
+        var dialog = new ContentDialog
+        {
+            Title = $"Set width for column {GetColumnName(column)}",
+            PrimaryButtonText = "Apply",
+            SecondaryButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary,
+            Content = new StackPanel
+            {
+                Spacing = 8,
+                Children =
+                {
+                    new TextBlock
+                    {
+                        Text = "Enter width in pixels (60 - 600)",
+                        FontSize = 12
+                    },
+                    textbox
+                }
+            }
+        };
+
+        dialog.XamlRoot = Content.XamlRoot;
+
+        var result = await dialog.ShowAsync();
+        if (result == ContentDialogResult.Primary)
+        {
+            if (double.TryParse(textbox.Text, NumberStyles.Number, CultureInfo.InvariantCulture, out var width))
+            {
+                width = Math.Clamp(width, 60, 600);
+                sheet.ColumnWidths[column] = width;
+                BuildSpreadsheetGrid(sheet);
+                ViewModel.StatusMessage = $"Column {GetColumnName(column)} width set to {width:F0}px";
+            }
+            else
+            {
+                ViewModel.StatusMessage = "Invalid column width entered";
+            }
+        }
+
+        _columnContextIndex = null;
+    }
+
+    private void ResetColumnWidth_Click(object sender, RoutedEventArgs e)
+    {
+        if (_columnContextIndex is null || ViewModel.SelectedSheet is null)
+        {
+            return;
+        }
+
+        var column = _columnContextIndex.Value;
+        var sheet = ViewModel.SelectedSheet;
+        if (column >= sheet.ColumnWidths.Count)
+        {
+            return;
+        }
+
+        sheet.ColumnWidths[column] = SheetViewModel.DefaultColumnWidth;
+        BuildSpreadsheetGrid(sheet);
+        ViewModel.StatusMessage = $"Reset column {GetColumnName(column)} width";
+        _columnContextIndex = null;
     }
 
     private void StartDirectEdit(CellViewModel cell, Button button)

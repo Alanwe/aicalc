@@ -9,6 +9,15 @@ namespace AiCalc.ViewModels;
 public class SheetViewModel
 {
     private readonly WorkbookViewModel _workbook;
+    public const double DefaultColumnWidth = 120d;
+    
+    private readonly ObservableCollection<double> _columnWidths;
+    private readonly ObservableCollection<bool> _columnVisibility;
+    private readonly ObservableCollection<bool> _rowVisibility;
+    
+    // Freeze panes support (Phase 8)
+    private int _frozenColumnCount = 0;
+    private int _frozenRowCount = 0;
 
     public SheetViewModel(WorkbookViewModel workbook, string name, int rows, int columns)
     {
@@ -16,6 +25,9 @@ public class SheetViewModel
         Workbook = workbook;
         Name = name;
         Rows = new ObservableCollection<RowViewModel>(Enumerable.Range(0, rows).Select(r => CreateRow(r, columns)));
+        _columnWidths = new ObservableCollection<double>(Enumerable.Repeat(DefaultColumnWidth, columns));
+        _columnVisibility = new ObservableCollection<bool>(Enumerable.Repeat(true, columns));
+        _rowVisibility = new ObservableCollection<bool>(Enumerable.Repeat(true, rows));
     }
 
     public WorkbookViewModel Workbook { get; }
@@ -25,6 +37,8 @@ public class SheetViewModel
     public ObservableCollection<RowViewModel> Rows { get; }
 
     public int ColumnCount => Rows.FirstOrDefault()?.Cells.Count ?? 0;
+
+    public ObservableCollection<double> ColumnWidths => _columnWidths;
 
     public IReadOnlyList<string> ColumnHeaders => Enumerable.Range(0, ColumnCount).Select(CellAddress.ColumnIndexToName).ToList();
 
@@ -45,6 +59,77 @@ public class SheetViewModel
     }
 
     public IEnumerable<CellViewModel> Cells => Rows.SelectMany(r => r.Cells);
+
+    // ==================== Visibility Support (Phase 8) ====================
+    
+    public IReadOnlyList<int> GetVisibleColumnIndices() => _columnVisibility
+        .Select((visible, index) => (visible, index))
+        .Where(pair => pair.visible)
+        .Select(pair => pair.index)
+        .ToList();
+
+    public IReadOnlyList<int> GetVisibleRowIndices() => _rowVisibility
+        .Select((visible, index) => (visible, index))
+        .Where(pair => pair.visible)
+        .Select(pair => pair.index)
+        .ToList();
+
+    public bool IsColumnVisible(int index) => index >= 0 && index < _columnVisibility.Count && _columnVisibility[index];
+
+    public bool IsRowVisible(int index) => index >= 0 && index < _rowVisibility.Count && _rowVisibility[index];
+
+    public void SetColumnVisibility(int index, bool isVisible)
+    {
+        if (index < 0 || index >= _columnVisibility.Count)
+        {
+            return;
+        }
+        _columnVisibility[index] = isVisible;
+    }
+
+    public void SetRowVisibility(int index, bool isVisible)
+    {
+        if (index < 0 || index >= _rowVisibility.Count)
+        {
+            return;
+        }
+        _rowVisibility[index] = isVisible;
+    }
+
+    public void ShowAllColumns()
+    {
+        for (int i = 0; i < _columnVisibility.Count; i++)
+        {
+            _columnVisibility[i] = true;
+        }
+    }
+
+    public void ShowAllRows()
+    {
+        for (int i = 0; i < _rowVisibility.Count; i++)
+        {
+            _rowVisibility[i] = true;
+        }
+    }
+
+    public int VisibleColumnCount => _columnVisibility.Count(v => v);
+
+    public int VisibleRowCount => _rowVisibility.Count(v => v);
+    
+    // Freeze panes properties
+    public int FrozenColumnCount
+    {
+        get => _frozenColumnCount;
+        set => _frozenColumnCount = Math.Max(0, Math.Min(value, ColumnCount));
+    }
+    
+    public int FrozenRowCount
+    {
+        get => _frozenRowCount;
+        set => _frozenRowCount = Math.Max(0, Math.Min(value, Rows.Count));
+    }
+    
+    public bool HasFrozenPanes => _frozenColumnCount > 0 || _frozenRowCount > 0;
 
     public void EnsureCapacity(int minimumRows, int minimumColumns)
     {
@@ -158,6 +243,7 @@ public class SheetViewModel
         {
             var newRow = CreateRow(Rows.Count, ColumnCount);
             Rows.Add(newRow);
+            _rowVisibility.Add(true);
         }
     }
 
@@ -170,10 +256,12 @@ public class SheetViewModel
                 var newCell = new CellViewModel(_workbook, this, row.Index, row.Cells.Count);
                 row.Cells.Add(newCell);
             }
+            _columnWidths.Add(DefaultColumnWidth);
+            _columnVisibility.Add(true);
         }
     }
     
-    // ==================== Row/Column Operations (Phase 5 Task 16) ====================
+    // ==================== Row/Column Operations (Phase 5/8) ====================
     
     public void InsertRow(int index)
     {
@@ -181,6 +269,7 @@ public class SheetViewModel
         
         var newRow = CreateRow(index, ColumnCount);
         Rows.Insert(index, newRow);
+        _rowVisibility.Insert(index, true);
         
         // Update row indices for all rows after the inserted row
         for (int r = index + 1; r < Rows.Count; r++)
@@ -194,6 +283,10 @@ public class SheetViewModel
         if (index < 0 || index >= Rows.Count || Rows.Count <= 1) return;
         
         Rows.RemoveAt(index);
+        if (index < _rowVisibility.Count)
+        {
+            _rowVisibility.RemoveAt(index);
+        }
         
         // Update row indices for all rows after the deleted row
         for (int r = index; r < Rows.Count; r++)
@@ -205,6 +298,9 @@ public class SheetViewModel
     public void InsertColumn(int index)
     {
         if (index < 0 || index > ColumnCount) return;
+        
+        _columnWidths.Insert(index, DefaultColumnWidth);
+        _columnVisibility.Insert(index, true);
         
         foreach (var row in Rows)
         {
@@ -222,6 +318,15 @@ public class SheetViewModel
     public void DeleteColumn(int index)
     {
         if (index < 0 || index >= ColumnCount || ColumnCount <= 1) return;
+        
+        if (index < _columnWidths.Count)
+        {
+            _columnWidths.RemoveAt(index);
+        }
+        if (index < _columnVisibility.Count)
+        {
+            _columnVisibility.RemoveAt(index);
+        }
         
         foreach (var row in Rows)
         {
