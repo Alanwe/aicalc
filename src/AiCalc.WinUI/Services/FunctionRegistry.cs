@@ -25,6 +25,11 @@ public class FunctionRegistry
     {
         _functions[descriptor.Name] = descriptor;
     }
+
+    public bool Unregister(string name)
+    {
+        return _functions.Remove(name);
+    }
     
     /// <summary>
     /// Get functions applicable to specific cell types

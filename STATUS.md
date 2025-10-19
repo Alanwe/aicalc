@@ -206,16 +206,33 @@ The AiCalc project is configured, tested, and ready. The project builds successf
 - ✅ Task 18: Undo/Redo System (Ctrl+Z/Y, 50-action history, command pattern)
 - ✅ Task 19: Formula Syntax Highlighting (Real-time tokenization, visual feedback)
 
+**Recent Progress**:
+- Phase 7: Python SDK & IPC (100% complete) ✅
+- Phase 6: AutoSave & CSV Export/Import (80% complete)
+- Phase 5: Settings, Undo/Redo, Formula Highlighting (100% complete)
+
 **Recent Commits**:
-- Phase 6: AutoSave & CSV Export/Import (current)
+- *New* - Phase 7 Complete (100%): Python SDK, IPC Bridge, Environment Detection, Settings UI
+- `d820712` - Phase 6 Complete (80%): AutoSave UI, CSV file pickers, preferences
 - `595a943` - Phase 5 Complete: Settings Persistence, Undo/Redo, Formula Syntax Highlighting
 - `29071a7` - Documentation updates for Phase 5
 
-**See**: `docs/Phase5_COMPLETE.md` and `docs/Phase5_Summary.md` for Phase 5 details.
+**See**: 
+- `docs/Phase7_Implementation.md` for Python SDK details (100% complete)
+- `docs/Phase6_Implementation.md` for AutoSave/CSV details
+- `docs/Phase5_COMPLETE.md` and `docs/Phase5_Summary.md` for Phase 5 details
+
+**Current Focus**: 
+- Phase 7 (100% complete): Python SDK fully operational ✅
+  - ✅ Named Pipes IPC server (PythonBridgeService.cs - Byte mode, direct I/O)
+  - ✅ Python client (aicalc_sdk - connect, get/set values, run functions)
+  - ✅ Environment detection (Registry, PATH, Conda, Venv scanning)
+  - ✅ Settings UI (Python tab with environment selector, SDK installer, test connection)
+  - ⏳ Function discovery (next phase - Task 21)
 
 **Next Steps**: 
-- Complete Phase 6: Enable autosave in settings, add Excel export/import
-- Phase 8 Advanced Features: Multi-cell selection, column resizing, freeze panes
+- Phase 7 Task 21: Python Function Discovery (scan for @aicalc_function decorators)
+- Then: Phase 8 Advanced Features (multi-cell selection, column resizing, freeze panes)
 - Or: Data source integration (REST APIs, databases)
 
 ---

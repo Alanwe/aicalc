@@ -80,6 +80,12 @@ public sealed partial class MainWindow : Page
         }
     }
 
+    public void RefreshFunctionCatalog()
+    {
+        InitializeFunctionSuggestions();
+        LoadFunctionsList();
+    }
+
     private void LoadFunctionsList()
     {
         FunctionsList.Children.Clear();

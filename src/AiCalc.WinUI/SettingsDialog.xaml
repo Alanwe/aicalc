@@ -412,6 +412,230 @@
                     </Border>
                 </StackPanel>
             </PivotItem>
+
+            <!-- Python Tab (Phase 7) -->
+            <PivotItem Header="Python">
+                <StackPanel Spacing="16">
+                    <!-- Python Environment -->
+                    <Border Style="{StaticResource SettingsSectionStyle}">
+                        <StackPanel Spacing="12">
+                            <TextBlock Text="Python Environment" 
+                                       Style="{StaticResource SubtitleTextBlockStyle}" />
+                            <TextBlock Text="Select the Python environment to use for Python SDK integration" 
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       TextWrapping="Wrap"
+                                       Margin="0,0,0,8" />
+
+                            <!-- Python Bridge Enable/Disable -->
+                            <ToggleSwitch x:Name="PythonBridgeToggle"
+                                          Header="Enable Python SDK Bridge"
+                                          IsOn="True"
+                                          Toggled="PythonBridgeToggle_Toggled" />
+
+                            <!-- Environment Selection -->
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="Python Environment:" FontWeight="SemiBold" />
+                                <ComboBox x:Name="PythonEnvironmentComboBox"
+                                          HorizontalAlignment="Stretch"
+                                          SelectionChanged="PythonEnvironmentComboBox_SelectionChanged"
+                                          DisplayMemberPath="Name"
+                                          PlaceholderText="Select Python environment...">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Padding="4">
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                </Grid.RowDefinitions>
+                                                <TextBlock Grid.Row="0" 
+                                                           Text="{Binding Name}" 
+                                                           FontWeight="SemiBold" />
+                                                <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8">
+                                                    <TextBlock Text="{Binding Type}" 
+                                                               FontSize="11"
+                                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                                    <TextBlock Text="•" 
+                                                               FontSize="11"
+                                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                                    <TextBlock Text="{Binding Version}" 
+                                                               FontSize="11"
+                                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                                </StackPanel>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+
+                                <TextBlock x:Name="PythonPathText"
+                                           Text=""
+                                           FontSize="11"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           TextWrapping="Wrap"
+                                           Margin="0,4,0,0" />
+                            </StackPanel>
+
+                            <!-- SDK Installation Status -->
+                            <StackPanel x:Name="SdkStatusPanel" Spacing="8" Margin="0,8,0,0">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon x:Name="SdkStatusIcon"
+                                              Glyph="&#xE73E;"
+                                              FontSize="16" />
+                                    <TextBlock x:Name="SdkStatusText"
+                                               Text="Checking SDK installation..."
+                                               VerticalAlignment="Center" />
+                                </StackPanel>
+                                <Button x:Name="InstallSdkButton"
+                                        Content="Install aicalc-sdk"
+                                        Click="InstallSdkButton_Click"
+                                        Visibility="Collapsed" />
+                            </StackPanel>
+
+                            <!-- Actions -->
+                            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,8,0,0">
+                                <Button Content="Refresh Environments" 
+                                        Click="RefreshPythonEnvironments_Click">
+                                    <Button.KeyboardAccelerators>
+                                        <KeyboardAccelerator Key="F5" />
+                                    </Button.KeyboardAccelerators>
+                                </Button>
+                                <Button Content="Test Connection" 
+                                        Click="TestPythonConnection_Click"
+                                        IsEnabled="{x:Bind PythonEnvironmentComboBox.SelectedItem, Converter={StaticResource ObjectToBoolConverter}, Mode=OneWay}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Python Functions Directory (minimal placeholder) -->
+                    <Border Style="{StaticResource SettingsSectionStyle}">
+                        <StackPanel Spacing="12">
+                            <TextBlock Text="Custom Python Functions"
+                                       Style="{StaticResource SubtitleTextBlockStyle}" />
+                            <TextBlock Text="Specify a directory containing Python files with @aicalc_function decorated functions"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       TextWrapping="Wrap"
+                                       Margin="0,0,0,8" />
+
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="Functions Directory:" FontWeight="SemiBold" />
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox x:Name="FunctionsDirectoryTextBox"
+                                             Grid.Column="0"
+                                             PlaceholderText="Select folder with Python functions..."
+                                             IsReadOnly="True" />
+                                    <Button Grid.Column="1"
+                                            Content="Browse..."
+                                            Click="BrowseFunctionsDirectory_Click" />
+                                </Grid>
+                            </StackPanel>
+
+                            <ToggleSwitch x:Name="HotReloadToggle"
+                                          Header="Enable Hot Reload"
+                                          IsOn="True"
+                                          Toggled="HotReloadToggle_Toggled" />
+                            <TextBlock Text="Automatically rescan when Python files change."
+                                       FontSize="11"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+
+                            <StackPanel Spacing="8">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <TextBlock Text="Discovered Functions:" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                    <TextBlock x:Name="FunctionCountText"
+                                               Text="(No scan yet)"
+                                               FontSize="11"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                               VerticalAlignment="Center" />
+                                </StackPanel>
+                                <Border BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="4"
+                                        MaxHeight="220">
+                                    <ListView x:Name="DiscoveredFunctionsList"
+                                              SelectionMode="None">
+                                        <ListView.ItemTemplate>
+                                            <DataTemplate>
+                                                <Grid Padding="8,4" ColumnSpacing="12">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <FontIcon Grid.Column="0"
+                                                              Glyph="&#xE73E;"
+                                                              FontSize="14"
+                                                              Foreground="{ThemeResource AccentFillColorDefaultBrush}"
+                                                              Margin="0,0,8,0" />
+                                                    <StackPanel Grid.Column="1" Spacing="4">
+                                                        <TextBlock Text="{Binding Name}"
+                                                                   FontWeight="SemiBold"
+                                                                   FontSize="13" />
+                                                        <TextBlock Text="{Binding Description}"
+                                                                   FontSize="11"
+                                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                   TextWrapping="WrapWholeWords"
+                                                                   MaxLines="2" />
+                                                        <TextBlock Text="{Binding FilePath}"
+                                                                   FontSize="10"
+                                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                   Opacity="0.8"
+                                                                   TextTrimming="CharacterEllipsis" />
+                                                        <Button Content="Open in VS Code"
+                                                                Tag="{Binding FilePath}"
+                                                                Click="OpenFunctionInVsCode_Click"
+                                                                HorizontalAlignment="Left"
+                                                                Margin="0,2,0,0"
+                                                                Padding="10,4" />
+                                                    </StackPanel>
+                                                    <TextBlock Grid.Column="2"
+                                                               Text="{Binding Category}"
+                                                               FontSize="11"
+                                                               Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                                               VerticalAlignment="Center"
+                                                               Margin="8,0,0,0" />
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ListView.ItemTemplate>
+                                    </ListView>
+                                </Border>
+                            </StackPanel>
+
+                            <Button x:Name="ScanFunctionsButton"
+                                    Content="Scan for Functions"
+                                    Click="ScanFunctions_Click">
+                                <Button.KeyboardAccelerators>
+                                    <KeyboardAccelerator Key="F5" Modifiers="Control" />
+                                </Button.KeyboardAccelerators>
+                            </Button>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Python SDK Info -->
+                    <Border Style="{StaticResource SettingsSectionStyle}">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="About Python SDK" 
+                                       Style="{StaticResource SubtitleTextBlockStyle}" />
+                            <TextBlock TextWrapping="Wrap"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}">
+                                The Python SDK allows you to interact with AiCalc from Python scripts via Named Pipes IPC. 
+                                You can read/write cells, execute functions, and automate workflows.
+                            </TextBlock>
+                            <TextBlock TextWrapping="Wrap"
+                                       Margin="0,4,0,0"
+                                       FontFamily="Consolas"
+                                       FontSize="11">
+                                from aicalc_sdk import connect<LineBreak/>
+                                <LineBreak/>
+                                with connect() as client:<LineBreak/>
+                                    client.set_value('A1', 42)<LineBreak/>
+                                    value = client.get_value('A1')
+                            </TextBlock>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </PivotItem>
         </Pivot>
     </ScrollViewer>
 </ContentDialog>

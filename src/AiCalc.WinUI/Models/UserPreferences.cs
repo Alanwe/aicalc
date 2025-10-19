@@ -76,4 +76,24 @@ public class UserPreferences
     /// AutoSave interval in minutes (Phase 6)
     /// </summary>
     public int AutoSaveIntervalMinutes { get; set; } = 5;
+
+    /// <summary>
+    /// Selected Python environment path (Phase 7)
+    /// </summary>
+    public string? PythonEnvironmentPath { get; set; }
+
+    /// <summary>
+    /// Enable Python SDK bridge (Phase 7)
+    /// </summary>
+    public bool PythonBridgeEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Python functions directory path (Phase 7 - Task 21)
+    /// </summary>
+    public string? PythonFunctionsDirectory { get; set; }
+
+    /// <summary>
+    /// Enable hot reload for Python functions (Phase 7 - Task 21)
+    /// </summary>
+    public bool PythonHotReloadEnabled { get; set; } = true;
 }

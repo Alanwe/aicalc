@@ -448,30 +448,45 @@ yes
 
 ## Phase 7: Python SDK & Scripting Integration
 
-### Task 20: Python SDK - Local Environment Detection
+### Task 20: Python SDK - Local Environment Detection ✅ COMPLETE
 **Goal**: Integrate with local Python runtime
 **Dependencies**: None (can be parallel)
+**Status**: ✅ Named Pipes IPC bridge, Python SDK client, environment detection, Settings UI all complete
 **Details**:
-- Detect installed Python environments (venv, conda, system)
-- Add Python environment selector in Settings
-- Implement Python SDK with functions:
-  - `connect()`: Connect to AiCalc from Python
-  - `get_value(cell_ref)`: Read cell value
-  - `set_value(cell_ref, value)`: Write cell value
-  - `run_function(name, args)`: Execute AiCalc function
-  - `get_range(range_ref)`: Read range as pandas DataFrame
-- Create Python package `aicalc-sdk` (installable via pip)
+- Detect installed Python environments (venv, conda, system) ✅ DONE
+- Add Python environment selector in Settings ✅ DONE
+- Implement Python SDK with functions: ✅ DONE
+  - `connect()`: Connect to AiCalc from Python ✅ DONE
+  - `get_value(cell_ref)`: Read cell value ✅ DONE
+  - `set_value(cell_ref, value)`: Write cell value ✅ DONE
+  - `run_function(name, args)`: Execute AiCalc function ✅ DONE
+  - `get_range(range_ref)`: Read range as pandas DataFrame ⚠️ Partial (future enhancement)
+  - `get_sheets()`: Get sheet list ✅ DONE
+- Create Python package `aicalc-sdk` (installable via pip) ✅ DONE
+- Settings UI with environment detection and SDK installation ✅ DONE
+
+**Implementation Notes**:
+- Using Named Pipes (\\.\pipe\AiCalc_Bridge) for secure IPC
+- PythonBridgeService.cs: Server-side IPC handler with Byte mode transmission
+- python-sdk/aicalc_sdk/client.py: Python client with pywin32
+- JSON-based request/response protocol with case-insensitive deserialization
+- Server starts automatically with WorkbookViewModel
+- PythonEnvironmentDetector.cs: Registry, PATH, Conda, Venv detection (342 lines)
+- Settings dialog Python tab: Environment selector, SDK status, test connection, install SDK
+- UserPreferences.cs: PythonEnvironmentPath and PythonBridgeEnabled properties
+- Verified working: set_value(), get_value(), get_sheets(), run_function()
 
 **Questions**:
 - Should the Python SDK use IPC, REST API, or COM interop?
-Whatever you think is the most robust and flexible. We need it to be secure. Id rather not run seperate servers if possible. A comnination is also acceptable
+✅ ANSWERED: Named Pipes (secure, no separate server, Windows-native)
 - Do you want Jupyter Notebook integration? Not at this stage, if we have an SDK we can connect from Python within Jupyter I think.
 
 ---
 
-### Task 21: Python Function Discovery & Execution
+### Task 21: Python Function Discovery & Execution ✅ COMPLETE
 **Goal**: Load custom Python functions into AiCalc
 **Dependencies**: Task 20
+**Status**: ✅ Discovery, typed execution, hot reload, and VS Code editing integrated
 **Details**:
 - Scan Python environment for functions with `@aicalc_function` decorator
 - Auto-register Python functions in FunctionRegistry

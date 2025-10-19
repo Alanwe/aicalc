@@ -26,6 +26,7 @@ public partial class WorkbookViewModel : BaseViewModel
     private readonly EvaluationEngine _evaluationEngine;
     private readonly UndoRedoManager _undoRedoManager;
     private readonly AutoSaveService _autoSaveService;
+    private readonly PythonBridgeService _pythonBridge;
 
     public WorkbookViewModel()
     {
@@ -56,6 +57,20 @@ public partial class WorkbookViewModel : BaseViewModel
             _autoSaveService.IsEnabled = prefs.AutoSaveEnabled;
             _autoSaveService.IntervalMinutes = prefs.AutoSaveIntervalMinutes;
         }
+
+        // Initialize Python bridge service (Phase 7)
+        System.Diagnostics.Debug.WriteLine("[WorkbookViewModel] Initializing Python bridge service...");
+        _pythonBridge = new PythonBridgeService(this);
+        _pythonBridge.MessageReceived += (s, msg) => {
+            System.Diagnostics.Debug.WriteLine($"[PythonBridge] {msg}");
+        };
+        _pythonBridge.ErrorOccurred += (s, ex) => {
+            System.Diagnostics.Debug.WriteLine($"[PythonBridge] ERROR: {ex.Message}");
+            StatusMessage = $"Python error: {ex.Message}";
+        };
+        System.Diagnostics.Debug.WriteLine("[WorkbookViewModel] Starting Python bridge service...");
+        _pythonBridge.Start();
+        System.Diagnostics.Debug.WriteLine("[WorkbookViewModel] Python bridge service start() called");
         
         Sheets = new ObservableCollection<SheetViewModel>();
         AttachSettings(Settings);
