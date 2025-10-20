@@ -235,12 +235,11 @@
                                       Header="Application Theme"
                                       HorizontalAlignment="Stretch"
                                       SelectionChanged="AppThemeComboBox_SelectionChanged">
-                                <ComboBoxItem Content="Use System Theme" Tag="System"/>
                                 <ComboBoxItem Content="Light" Tag="Light"/>
                                 <ComboBoxItem Content="Dark" Tag="Dark"/>
                             </ComboBox>
                             
-                            <TextBlock Text="System theme will automatically match your Windows theme preference"
+                            <TextBlock Text="Choose between Light and Dark themes for the entire application"
                                        FontSize="11"
                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                        TextWrapping="Wrap"/>

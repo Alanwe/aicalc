@@ -9,14 +9,36 @@
                 <!-- Cell State Themes (Task 10) - Loaded dynamically in App.xaml.cs -->
                 <ResourceDictionary Source="Themes/CellStateThemes.xaml"/>
             </ResourceDictionary.MergedDictionaries>
-            <SolidColorBrush x:Key="SpreadsheetBackgroundBrush" Color="#FF101820" />
-            <SolidColorBrush x:Key="SpreadsheetCardBrush" Color="#FF1E2A33" />
-            <SolidColorBrush x:Key="SpreadsheetAccentBrush" Color="#FF4F9CFF" />
-            <SolidColorBrush x:Key="SpreadsheetAccentBrushAlt" Color="#FF00C853" />
+            <!-- Palette (defaults to Dark) - VS Code inspired professional dark theme -->
+            <SolidColorBrush x:Key="AppBackgroundBrush" Color="#FF1E1E1E" />
+            <SolidColorBrush x:Key="CardBackgroundBrush" Color="#FF252526" />
+            <SolidColorBrush x:Key="AccentBrush" Color="#FF0E639C" />
+            <SolidColorBrush x:Key="AccentBrushAlt" Color="#FF00A876" />
+            <SolidColorBrush x:Key="TextPrimaryBrush" Color="#FFCCCCCC" />
+            <SolidColorBrush x:Key="TextSecondaryBrush" Color="#FF808080" />
+            <SolidColorBrush x:Key="BorderBrushColor" Color="#FF3E3E42" />
+            <SolidColorBrush x:Key="GridLineColor" Color="#FF2D2D30" />
+            <SolidColorBrush x:Key="HeaderBackgroundBrush" Color="#FF2D2D30" />
+            <SolidColorBrush x:Key="CellBackgroundBrush" Color="#FF252526" />
+            <!-- Cell Theme Brushes - updated dynamically by ApplyCellStateTheme and ApplyApplicationTheme -->
+            <SolidColorBrush x:Key="CellThemeBackgroundBrush" Color="#FF252526" />
+            <SolidColorBrush x:Key="CellThemeForegroundBrush" Color="#FFCCCCCC" />
+            <SolidColorBrush x:Key="CellThemeBorderBrush" Color="#FF2D2D30" />
+            <!-- Light Palette (alternate) - matching light mockup -->
+            <SolidColorBrush x:Key="AppBackgroundBrush.Light" Color="#FFE8E8E8" />
+            <SolidColorBrush x:Key="CardBackgroundBrush.Light" Color="#FFF5F5F5" />
+            <SolidColorBrush x:Key="AccentBrush.Light" Color="#FF0078D4" />
+            <SolidColorBrush x:Key="AccentBrushAlt.Light" Color="#FF107C10" />
+            <SolidColorBrush x:Key="TextPrimaryBrush.Light" Color="#FF1E1E1E" />
+            <SolidColorBrush x:Key="TextSecondaryBrush.Light" Color="#FF616161" />
+            <SolidColorBrush x:Key="BorderBrushColor.Light" Color="#FFD0D0D0" />
+            <SolidColorBrush x:Key="GridLineColor.Light" Color="#FFD0D0D0" />
+            <SolidColorBrush x:Key="HeaderBackgroundBrush.Light" Color="#FFE0E0E0" />
+            <SolidColorBrush x:Key="CellBackgroundBrush.Light" Color="#FFF8F8F8" />
             <FontFamily x:Key="HeadingFont">Segoe UI Semibold</FontFamily>
             <FontFamily x:Key="BodyFont">Segoe UI</FontFamily>
             <Style x:Key="AccentButtonStyle" TargetType="Button">
-                <Setter Property="Background" Value="{StaticResource SpreadsheetAccentBrush}" />
+                <Setter Property="Background" Value="{StaticResource AccentBrush}" />
                 <Setter Property="Foreground" Value="White" />
                 <Setter Property="CornerRadius" Value="8" />
                 <Setter Property="Padding" Value="16,8" />

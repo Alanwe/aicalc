@@ -63,7 +63,7 @@
         </MenuFlyout>
     </Page.Resources>
 
-    <Grid Background="#1A1A1A">
+    <Grid Background="{ThemeResource AppBackgroundBrush}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
@@ -71,9 +71,9 @@
         </Grid.RowDefinitions>
 
         <!-- Header -->
-        <Grid Grid.Row="0" Background="#2D2D30" Padding="16,12">
-            <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-                <TextBlock Text="⚡ AiCalc Studio" FontSize="18" FontWeight="SemiBold" Foreground="White" />
+    <Grid Grid.Row="0" Background="{ThemeResource CardBackgroundBrush}" Padding="12,8" BorderBrush="{ThemeResource BorderBrushColor}" BorderThickness="0,0,0,1">
+            <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                <TextBlock Text="⚡ AiCalc Studio" FontSize="16" FontWeight="SemiBold" Foreground="{ThemeResource TextPrimaryBrush}" />
                 <TextBox Width="240"
                          PlaceholderText="Workbook title"
                          Text="{x:Bind ViewModel.Title, Mode=TwoWay}"
@@ -95,6 +95,10 @@
                         ToolTipService.ToolTip="Import CSV as new sheet" />
                 <Button Content="⚙️ Settings"
                         Click="SettingsButton_Click" />
+        <Button x:Name="ThemeToggleButton"
+            Content="☀️ Light"
+                        Click="ThemeToggle_Click"
+                        ToolTipService.ToolTip="Toggle Light/Dark theme (Ctrl+T)" />
             </StackPanel>
         </Grid>
 
@@ -109,17 +113,17 @@
             </Grid.ColumnDefinitions>
             
             <!-- Left Panel - Functions -->
-            <Border x:Name="FunctionsPanel" Grid.Column="0" Background="#2D2D30" Padding="16" CornerRadius="8" Margin="0,0,6,0">
+            <Border x:Name="FunctionsPanel" Grid.Column="0" Background="{ThemeResource CardBackgroundBrush}" Padding="16" CornerRadius="8" Margin="0,0,6,0">
                 <StackPanel Spacing="12">
                     <Grid>
-                        <TextBlock Text="📚 Functions" FontSize="16" FontWeight="SemiBold" Foreground="White" HorizontalAlignment="Left" />
+                        <TextBlock Text="📚 Functions" FontSize="15" FontWeight="SemiBold" Foreground="{ThemeResource TextPrimaryBrush}" HorizontalAlignment="Left" />
                         <Button x:Name="ToggleFunctionsButton" 
                                 Content="◀" 
                                 Click="ToggleFunctionsPanel_Click"
                                 Background="Transparent"
                                 BorderThickness="0"
-                                FontSize="14"
-                                Foreground="White"
+                                FontSize="12"
+                                Foreground="{ThemeResource TextSecondaryBrush}"
                                 HorizontalAlignment="Right"
                                 ToolTipService.ToolTip="Hide Functions Panel" />
                     </Grid>
@@ -132,7 +136,7 @@
             <!-- Left Splitter / Show Functions Button -->
         <Border x:Name="LeftSplitter" Grid.Column="1"
             Margin="0"
-            Background="#22FFFFFF"
+            Background="{ThemeResource BorderBrushColor}"
             CornerRadius="2"
             PointerPressed="LeftSplitter_PointerPressed"
             PointerMoved="LeftSplitter_PointerMoved"
@@ -144,10 +148,11 @@
                     Content="▶"
                     Visibility="Collapsed"
                     Click="ToggleFunctionsPanel_Click"
-                    Background="#44FFFFFF"
-                    BorderThickness="0"
+                    Background="{ThemeResource CardBackgroundBrush}"
+                    BorderThickness="1"
+                    BorderBrush="{ThemeResource BorderBrushColor}"
                     FontSize="12"
-                    Foreground="White"
+                    Foreground="{ThemeResource TextPrimaryBrush}"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center"
                     Width="32"
@@ -157,7 +162,7 @@
         </Border>
             
             <!-- Center Panel - Spreadsheet -->
-            <Border Grid.Column="2" Background="#2D2D30" Padding="8" CornerRadius="8">
+            <Border Grid.Column="2" Background="{ThemeResource CardBackgroundBrush}" Padding="8" CornerRadius="8">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -172,33 +177,50 @@
                              AddTabButtonClick="AddTab_Click"/>
                     
                     <!-- Spreadsheet Grid -->
-                    <ScrollViewer Grid.Row="1" 
+                    <ScrollViewer x:Name="SpreadsheetScrollViewer" Grid.Row="1" 
                                   HorizontalScrollBarVisibility="Visible" 
                                   VerticalScrollBarVisibility="Visible"
-                                  Background="#1E1E1E">
+                                  Background="{ThemeResource AppBackgroundBrush}">
                         <Grid>
                             <Grid x:Name="SpreadsheetGrid" Margin="12"/>
                             <TextBox x:Name="CellEditBox"
                                      Visibility="Collapsed"
-                                     Background="White"
-                                     Foreground="Black"
-                                     BorderBrush="#00D4FF"
+                                     Background="{ThemeResource CardBackgroundBrush}"
+                                     Foreground="{ThemeResource TextPrimaryBrush}"
+                                     BorderBrush="{ThemeResource AccentBrush}"
                                      BorderThickness="2"
-                                     Padding="8"
-                                     FontSize="13"
+                                     Padding="4,8"
+                                     FontSize="14"
                                      TextWrapping="NoWrap"
+                                     CornerRadius="2"
+                                     IsSpellCheckEnabled="False"
                                      GotFocus="CellEditBox_GotFocus"
                                      LostFocus="CellEditBox_LostFocus"
-                                     KeyDown="CellEditBox_KeyDown"/>
+                                     KeyDown="CellEditBox_KeyDown">
+                                <TextBox.Template>
+                                    <ControlTemplate TargetType="TextBox">
+                                        <Border Background="{TemplateBinding Background}"
+                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                BorderThickness="{TemplateBinding BorderThickness}"
+                                                CornerRadius="{TemplateBinding CornerRadius}">
+                                            <ScrollViewer x:Name="ContentElement"
+                                                          Padding="{TemplateBinding Padding}"
+                                                          HorizontalScrollBarVisibility="Hidden"
+                                                          VerticalScrollBarVisibility="Hidden"
+                                                          VerticalAlignment="Center"/>
+                                        </Border>
+                                    </ControlTemplate>
+                                </TextBox.Template>
+                            </TextBox>
                         </Grid>
                     </ScrollViewer>
                 </Grid>
             </Border>
 
             <!-- Right Splitter / Show Inspector Button -->
-        <Border x:Name="RightSplitter" Grid.Column="3"
+            <Border x:Name="RightSplitter" Grid.Column="3"
             Margin="0"
-            Background="#22FFFFFF"
+            Background="{ThemeResource BorderBrushColor}"
             CornerRadius="2"
             PointerPressed="RightSplitter_PointerPressed"
             PointerMoved="RightSplitter_PointerMoved"
@@ -210,10 +232,11 @@
                     Content="◀"
                     Visibility="Collapsed"
                     Click="ToggleInspectorPanel_Click"
-                    Background="#44FFFFFF"
-                    BorderThickness="0"
+                    Background="{ThemeResource CardBackgroundBrush}"
+                    BorderThickness="1"
+                    BorderBrush="{ThemeResource BorderBrushColor}"
                     FontSize="12"
-                    Foreground="White"
+                    Foreground="{ThemeResource TextPrimaryBrush}"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center"
                     Width="32"
@@ -223,30 +246,30 @@
         </Border>
             
             <!-- Right Panel - Cell Inspector -->
-            <Border x:Name="InspectorPanel" Grid.Column="4" Background="#2D2D30" Padding="16" CornerRadius="8" Margin="6,0,0,0">
+            <Border x:Name="InspectorPanel" Grid.Column="4" Background="{ThemeResource CardBackgroundBrush}" Padding="16" CornerRadius="8" Margin="6,0,0,0">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Spacing="16">
                         <Grid>
-                            <TextBlock Text="🔍 Cell Inspector" FontSize="16" FontWeight="SemiBold" Foreground="White" HorizontalAlignment="Left" />
+                            <TextBlock Text="🔍 Cell Inspector" FontSize="15" FontWeight="SemiBold" Foreground="{ThemeResource TextPrimaryBrush}" HorizontalAlignment="Left" />
                             <Button x:Name="ToggleInspectorButton" 
                                     Content="▶" 
                                     Click="ToggleInspectorPanel_Click"
                                     Background="Transparent"
                                     BorderThickness="0"
-                                    FontSize="14"
-                                    Foreground="White"
+                                    FontSize="12"
+                                    Foreground="{ThemeResource TextSecondaryBrush}"
                                     HorizontalAlignment="Right"
                                     ToolTipService.ToolTip="Hide Inspector Panel" />
                         </Grid>
                         
                         <StackPanel x:Name="CellInspectorPanel" Spacing="12" Visibility="Collapsed">
                             <TextBlock x:Name="CellLabel" 
-                                       Foreground="#00D4FF" 
+                                       Foreground="{ThemeResource AccentBrush}" 
                                        FontSize="16" 
                                        FontWeight="SemiBold" />
                             
                             <StackPanel Spacing="6">
-                                <TextBlock Text="Value" Foreground="#CCFFFFFF" FontSize="13" FontWeight="SemiBold" />
+                                <TextBlock Text="Value" Foreground="{ThemeResource TextPrimaryBrush}" FontSize="13" FontWeight="SemiBold" />
                                 <TextBox x:Name="CellValueBox" 
                                          AcceptsReturn="True" 
                                          Height="70" 
@@ -256,9 +279,9 @@
                             
                             <StackPanel Spacing="6">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <TextBlock Text="Formula" Foreground="#CCFFFFFF" FontSize="13" FontWeight="SemiBold" />
+                                    <TextBlock Text="Formula" Foreground="{ThemeResource TextPrimaryBrush}" FontSize="13" FontWeight="SemiBold" />
                                     <TextBlock x:Name="FormulaSyntaxInfo" 
-                                               Foreground="#88FFFFFF" 
+                                               Foreground="{ThemeResource TextSecondaryBrush}" 
                                                FontSize="11" 
                                                VerticalAlignment="Center"
                                                Visibility="Collapsed" />
@@ -323,8 +346,8 @@
                                     <Popup x:Name="ParameterHintPopup"
                                            IsOpen="False"
                                            IsLightDismissEnabled="True">
-                                        <Border Background="#2D2D30"
-                                                BorderBrush="#55FFFFFF"
+                    <Border Background="{ThemeResource CardBackgroundBrush}"
+                        BorderBrush="{ThemeResource BorderBrushColor}"
                                                 BorderThickness="1"
                                                 CornerRadius="6"
                                                 Padding="8"
@@ -333,7 +356,7 @@
                                                 <TextBlock x:Name="ParameterHintFunctionName"
                                                            Text="SUM"
                                                            FontWeight="SemiBold"
-                                                           Foreground="White"/>
+                                                           Foreground="{ThemeResource TextPrimaryBrush}"/>
                                                 <ItemsControl x:Name="ParameterHintList">
                                                     <ItemsControl.ItemTemplate>
                                                         <DataTemplate x:DataType="local:ParameterHintItem">
@@ -343,7 +366,7 @@
                                                                            Foreground="{x:Bind Brush}"
                                                                            FontSize="12"/>
                                                                 <TextBlock Text="{x:Bind Description}"
-                                                                           Foreground="#88FFFFFF"
+                                                                           Foreground="{ThemeResource TextSecondaryBrush}"
                                                                            FontSize="10"
                                                                            TextWrapping="Wrap"
                                                                            Visibility="{x:Bind DescriptionVisibility}"/>
@@ -353,7 +376,7 @@
                                                 </ItemsControl>
                                                 <TextBlock x:Name="ParameterHintDescription"
                                                            Text=""
-                                                           Foreground="#88FFFFFF"
+                                                           Foreground="{ThemeResource TextSecondaryBrush}"
                                                            TextWrapping="Wrap"
                                                            FontSize="11"/>
                                             </StackPanel>
@@ -363,7 +386,7 @@
                             </StackPanel>
                             
                             <StackPanel Spacing="6">
-                                <TextBlock Text="Automation" Foreground="#CCFFFFFF" FontSize="13" FontWeight="SemiBold" />
+                                <TextBlock Text="Automation" Foreground="{ThemeResource TextPrimaryBrush}" FontSize="13" FontWeight="SemiBold" />
                                 <ComboBox x:Name="AutomationModeBox"
                                           HorizontalAlignment="Stretch"
                                           SelectionChanged="AutomationMode_Changed">
@@ -379,7 +402,7 @@
                                     HorizontalAlignment="Stretch" />
                             
                             <StackPanel Spacing="6">
-                                <TextBlock Text="Notes" Foreground="#CCFFFFFF" FontSize="13" FontWeight="SemiBold" />
+                                <TextBlock Text="Notes" Foreground="{ThemeResource TextPrimaryBrush}" FontSize="13" FontWeight="SemiBold" />
                                 <TextBox x:Name="CellNotesBox" 
                                          AcceptsReturn="True" 
                                          Height="80"
@@ -391,11 +414,11 @@
                         
                         <StackPanel x:Name="NoCellPanel" Spacing="8">
                             <TextBlock Text="💡 No cell selected" 
-                                       Foreground="#88FFFFFF"
+                                       Foreground="{ThemeResource TextSecondaryBrush}"
                                        FontSize="14"
                                        TextAlignment="Center" />
                             <TextBlock Text="Click on a cell to edit" 
-                                       Foreground="#55FFFFFF"
+                                       Foreground="{ThemeResource TextSecondaryBrush}"
                                        FontSize="12"
                                        TextWrapping="Wrap"
                                        TextAlignment="Center" />
@@ -406,19 +429,20 @@
         </Grid>
 
         <!-- Status Bar -->
-        <Grid Grid.Row="2" Background="#252526" Height="32" Padding="16,0">
+    <Grid Grid.Row="2" Background="{ThemeResource CardBackgroundBrush}" Height="32" Padding="16,0">
             <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-                <TextBlock Text="✅ Ready" Foreground="#88FF88" FontSize="12" FontWeight="SemiBold" />
-                <TextBlock Text="|" Foreground="#555555" />
+                <TextBlock Text="✅ Ready" Foreground="{ThemeResource AccentBrushAlt}" FontSize="12" FontWeight="SemiBold" />
+                <TextBlock Text="|" Foreground="{ThemeResource BorderBrushColor}" />
                 <TextBlock Text="{x:Bind ViewModel.Title, Mode=OneWay}" 
-                           Foreground="#CCFFFFFF" 
+                           Foreground="{ThemeResource TextPrimaryBrush}" 
                            FontSize="12" />
-                <TextBlock Text="|" Foreground="#555555" />
+                <TextBlock Text="|" Foreground="{ThemeResource BorderBrushColor}" />
                 <TextBlock x:Name="SelectionInfoText"
                            Text="Selection: none"
-                           Foreground="#88FFFFFF"
+                           Foreground="{ThemeResource TextSecondaryBrush}"
                            FontSize="12" />
             </StackPanel>
         </Grid>
     </Grid>
 </Page>
+

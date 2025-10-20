@@ -188,22 +188,19 @@ public sealed partial class SettingsDialog : ContentDialog
         {
             var theme = (AppTheme)AppThemeComboBox.SelectedIndex;
             Settings.ApplicationTheme = theme;
-            ApplyApplicationTheme(theme);
-        }
-    }
-
-    private void ApplyApplicationTheme(AppTheme theme)
-    {
-        var window = App.MainWindow;
-        if (window?.Content is FrameworkElement rootElement)
-        {
-            rootElement.RequestedTheme = theme switch
+            
+            // Save to preferences
+            var prefs = App.PreferencesService.LoadPreferences();
+            prefs.Theme = theme switch
             {
-                AppTheme.Light => ElementTheme.Light,
-                AppTheme.Dark => ElementTheme.Dark,
-                AppTheme.System => ElementTheme.Default,
-                _ => ElementTheme.Default
+                AppTheme.Light => "Light",
+                AppTheme.Dark => "Dark",
+                _ => "System"
             };
+            App.PreferencesService.SavePreferences(prefs);
+            
+            // Apply the theme globally
+            App.ApplyApplicationTheme(theme);
         }
     }
 

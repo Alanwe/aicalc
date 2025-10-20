@@ -59,8 +59,33 @@ public partial class App : Application
             // Load user preferences (Phase 5)
             var prefs = PreferencesService.LoadPreferences();
             
-            // Apply cell state theme
-            ApplyCellStateTheme(CellVisualTheme.Light);
+            // Ensure theme is set to Dark if it's somehow empty or System
+            if (string.IsNullOrEmpty(prefs.Theme) || prefs.Theme == "System")
+            {
+                prefs.Theme = "Dark";
+                PreferencesService.SavePreferences(prefs);
+            }
+            
+            // Apply saved application theme FIRST (before creating MainWindow)
+            var appTheme = prefs.Theme switch
+            {
+                "Light" => AppTheme.Light,
+                "Dark" => AppTheme.Dark,
+                _ => AppTheme.Dark  // Default to Dark theme
+            };
+            ApplyApplicationTheme(appTheme);
+            
+            // Also update cell theme colors to match application theme
+            if (Current.Resources.TryGetValue("CellThemeBackgroundBrush", out var cellBgBrush) && cellBgBrush is SolidColorBrush)
+            {
+                Current.Resources["CellThemeBackgroundBrush"] = new SolidColorBrush(appTheme == AppTheme.Dark ? Color.FromArgb(0xFF, 0x25, 0x25, 0x26) : Color.FromArgb(0xFF, 0xF8, 0xF8, 0xF8));
+                Current.Resources["CellThemeForegroundBrush"] = new SolidColorBrush(appTheme == AppTheme.Dark ? Color.FromArgb(0xFF, 0xCC, 0xCC, 0xCC) : Color.FromArgb(0xFF, 0x1E, 0x1E, 0x1E));
+                Current.Resources["CellThemeBorderBrush"] = new SolidColorBrush(appTheme == AppTheme.Dark ? Color.FromArgb(0xFF, 0x2D, 0x2D, 0x30) : Color.FromArgb(0xFF, 0xD0, 0xD0, 0xD0));
+            }
+            
+            // Apply cell state theme to match application theme
+            var defaultCellTheme = appTheme == AppTheme.Dark ? CellVisualTheme.Dark : CellVisualTheme.Light;
+            ApplyCellStateTheme(defaultCellTheme);
             
             if (_window is null)
             {
@@ -71,20 +96,60 @@ public partial class App : Application
                 _window.Content = new MainWindow();
                 MainWindow = _window;
                 
-                // Apply saved application theme
-                var appTheme = prefs.Theme switch
-                {
-                    "Light" => AppTheme.Light,
-                    "Dark" => AppTheme.Dark,
-                    _ => AppTheme.System
-                };
-                ApplyApplicationTheme(appTheme);
-                
-                // Restore window size
+                // Set window size - restore saved size or use sensible defaults
+                var appWindow = _window.AppWindow;
                 if (prefs.WindowWidth > 0 && prefs.WindowHeight > 0)
                 {
-                    var appWindow = _window.AppWindow;
                     appWindow.Resize(new Windows.Graphics.SizeInt32((int)prefs.WindowWidth, (int)prefs.WindowHeight));
+                }
+                else
+                {
+                    // Set initial size to fit within screen with safe margins
+                    var displayArea = Microsoft.UI.Windowing.DisplayArea.Primary;
+                    if (displayArea != null)
+                    {
+                        var workArea = displayArea.WorkArea;
+                        // Use 70% of work area with smaller max size to ensure it fits
+                        int targetWidth = Math.Min(1200, (int)(workArea.Width * 0.7));
+                        int targetHeight = Math.Min(750, (int)(workArea.Height * 0.7));
+
+                        const int topMargin = 40;
+                        const int bottomMargin = 40;
+                        int maxHeight = workArea.Height - topMargin - bottomMargin;
+                        if (maxHeight <= 0)
+                        {
+                            maxHeight = workArea.Height;
+                        }
+
+                        if (targetHeight > maxHeight)
+                        {
+                            targetHeight = maxHeight;
+                        }
+
+                        appWindow.Resize(new Windows.Graphics.SizeInt32(targetWidth, targetHeight));
+
+                        int x = workArea.X + (workArea.Width - targetWidth) / 2;
+                        int availableForPosition = Math.Max(workArea.Height - targetHeight - topMargin - bottomMargin, 0);
+                        int y = workArea.Y + topMargin + availableForPosition / 2;
+
+                        // Ensure window fits within work area vertically
+                        int maxY = workArea.Y + workArea.Height - targetHeight - bottomMargin;
+                        if (y > maxY)
+                        {
+                            y = Math.Max(workArea.Y + topMargin, maxY);
+                        }
+                        if (y < workArea.Y)
+                        {
+                            y = workArea.Y;
+                        }
+
+                        appWindow.Move(new Windows.Graphics.PointInt32(x, y));
+                    }
+                    else
+                    {
+                        // Fallback to smaller default that fits most screens
+                        appWindow.Resize(new Windows.Graphics.SizeInt32(1200, 750));
+                    }
                 }
                 
                 // Handle window closing to save preferences
@@ -136,9 +201,9 @@ public partial class App : Application
                 manualUpdate = Color.FromArgb(0xFF, 0xFF, 0xA5, 0x00);   // Orange
                 error = Color.FromArgb(0xFF, 0xDC, 0x14, 0x3C);          // Crimson
                 dependency = Color.FromArgb(0xFF, 0xFF, 0xD7, 0x00);     // Gold
-                cellBackground = Color.FromArgb(0xFF, 0xF7, 0xFA, 0xFF);
-                cellForeground = Color.FromArgb(0xFF, 0x20, 0x2A, 0x36);
-                cellBorder = Color.FromArgb(0xFF, 0xC7, 0xD3, 0xE3);
+                cellBackground = Color.FromArgb(0xFF, 0xF8, 0xF8, 0xF8); // Light gray matching mockup
+                cellForeground = Color.FromArgb(0xFF, 0x1E, 0x1E, 0x1E);
+                cellBorder = Color.FromArgb(0xFF, 0xD0, 0xD0, 0xD0);
                 break;
 
             case CellVisualTheme.Dark:
@@ -148,9 +213,9 @@ public partial class App : Application
                 manualUpdate = Color.FromArgb(0xFF, 0xFF, 0x8C, 0x00);   // DarkOrange
                 error = Color.FromArgb(0xFF, 0xFF, 0x44, 0x44);          // Bright Red
                 dependency = Color.FromArgb(0xFF, 0xFF, 0xD7, 0x00);     // Gold
-                cellBackground = Color.FromArgb(0xFF, 0x23, 0x28, 0x31);
-                cellForeground = Color.FromArgb(0xFF, 0xF5, 0xF7, 0xFA);
-                cellBorder = Color.FromArgb(0xFF, 0x43, 0x4B, 0x55);
+                cellBackground = Color.FromArgb(0xFF, 0x25, 0x25, 0x26); // Darker to match theme
+                cellForeground = Color.FromArgb(0xFF, 0xCC, 0xCC, 0xCC);
+                cellBorder = Color.FromArgb(0xFF, 0x2D, 0x2D, 0x30);
                 break;
 
             case CellVisualTheme.HighContrast:
@@ -180,24 +245,60 @@ public partial class App : Application
                 break;
         }
 
-        // Update app resources
-        Current.Resources["CellStateJustUpdatedBrush"] = new SolidColorBrush(justUpdated);
-        Current.Resources["CellStateCalculatingBrush"] = new SolidColorBrush(calculating);
-        Current.Resources["CellStateStaleBrush"] = new SolidColorBrush(stale);
-        Current.Resources["CellStateManualUpdateBrush"] = new SolidColorBrush(manualUpdate);
-        Current.Resources["CellStateErrorBrush"] = new SolidColorBrush(error);
-        Current.Resources["CellStateInDependencyChainBrush"] = new SolidColorBrush(dependency);
-        Current.Resources["CellStateNormalBrush"] = new SolidColorBrush(cellBackground);
-        Current.Resources["CellThemeBackgroundBrush"] = new SolidColorBrush(cellBackground);
-        Current.Resources["CellThemeForegroundBrush"] = new SolidColorBrush(cellForeground);
-        Current.Resources["CellThemeBorderBrush"] = new SolidColorBrush(cellBorder);
+    // Update app resources in-place so theme swaps propagate immediately
+    var resources = Current.Resources;
+    UpdateResourceBrush(resources, "CellStateJustUpdatedBrush", justUpdated);
+    UpdateResourceBrush(resources, "CellStateCalculatingBrush", calculating);
+    UpdateResourceBrush(resources, "CellStateStaleBrush", stale);
+    UpdateResourceBrush(resources, "CellStateManualUpdateBrush", manualUpdate);
+    UpdateResourceBrush(resources, "CellStateErrorBrush", error);
+    UpdateResourceBrush(resources, "CellStateInDependencyChainBrush", dependency);
+    UpdateResourceBrush(resources, "CellStateNormalBrush", cellBackground);
+    UpdateResourceBrush(resources, "CellThemeBackgroundBrush", cellBackground);
+    UpdateResourceBrush(resources, "CellThemeForegroundBrush", cellForeground);
+    UpdateResourceBrush(resources, "CellThemeBorderBrush", cellBorder);
     }
 
     /// <summary>
-    /// Applies the selected application theme (Task 10)
+    /// Applies the selected application theme - professional VS Code inspired dark theme
     /// </summary>
     public static void ApplyApplicationTheme(AppTheme theme)
     {
+        // Swap resource brushes based on application theme
+        bool useLight = theme == AppTheme.Light;
+
+        var resources = Current.Resources;
+        
+        // Define color palettes - professional dark theme matching mockup
+        Color appBg = useLight ? Color.FromArgb(0xFF, 0xE8, 0xE8, 0xE8) : Color.FromArgb(0xFF, 0x1E, 0x1E, 0x1E);
+        Color cardBg = useLight ? Color.FromArgb(0xFF, 0xF5, 0xF5, 0xF5) : Color.FromArgb(0xFF, 0x25, 0x25, 0x26);
+        Color accent = useLight ? Color.FromArgb(0xFF, 0x00, 0x78, 0xD4) : Color.FromArgb(0xFF, 0x0E, 0x63, 0x9C);
+        Color accentAlt = useLight ? Color.FromArgb(0xFF, 0x10, 0x7C, 0x10) : Color.FromArgb(0xFF, 0x00, 0xA8, 0x76);
+        Color textPrimary = useLight ? Color.FromArgb(0xFF, 0x1E, 0x1E, 0x1E) : Color.FromArgb(0xFF, 0xCC, 0xCC, 0xCC);
+        Color textSecondary = useLight ? Color.FromArgb(0xFF, 0x61, 0x61, 0x61) : Color.FromArgb(0xFF, 0x80, 0x80, 0x80);
+        Color border = useLight ? Color.FromArgb(0xFF, 0xD0, 0xD0, 0xD0) : Color.FromArgb(0xFF, 0x3E, 0x3E, 0x42);
+        Color gridLine = useLight ? Color.FromArgb(0xFF, 0xD0, 0xD0, 0xD0) : Color.FromArgb(0xFF, 0x2D, 0x2D, 0x30);
+        Color headerBg = useLight ? Color.FromArgb(0xFF, 0xE0, 0xE0, 0xE0) : Color.FromArgb(0xFF, 0x2D, 0x2D, 0x30);
+        Color cellBg = useLight ? Color.FromArgb(0xFF, 0xF8, 0xF8, 0xF8) : Color.FromArgb(0xFF, 0x25, 0x25, 0x26);
+        
+        // Update resource brushes
+    UpdateResourceBrush(resources, "AppBackgroundBrush", appBg);
+    UpdateResourceBrush(resources, "CardBackgroundBrush", cardBg);
+    UpdateResourceBrush(resources, "AccentBrush", accent);
+    UpdateResourceBrush(resources, "AccentBrushAlt", accentAlt);
+    UpdateResourceBrush(resources, "TextPrimaryBrush", textPrimary);
+    UpdateResourceBrush(resources, "TextSecondaryBrush", textSecondary);
+    UpdateResourceBrush(resources, "BorderBrushColor", border);
+    UpdateResourceBrush(resources, "GridLineColor", gridLine);
+    UpdateResourceBrush(resources, "HeaderBackgroundBrush", headerBg);
+    UpdateResourceBrush(resources, "CellBackgroundBrush", cellBg);
+
+    // Also update cell theme brushes to match application theme
+    UpdateResourceBrush(resources, "CellThemeBackgroundBrush", cellBg);
+    UpdateResourceBrush(resources, "CellThemeForegroundBrush", textPrimary);
+    UpdateResourceBrush(resources, "CellThemeBorderBrush", gridLine);
+        
+        // Also update the root element's RequestedTheme for WinUI controls
         if (MainWindow?.Content is FrameworkElement rootElement)
         {
             rootElement.RequestedTheme = theme switch
@@ -205,8 +306,20 @@ public partial class App : Application
                 AppTheme.Light => ElementTheme.Light,
                 AppTheme.Dark => ElementTheme.Dark,
                 AppTheme.System => ElementTheme.Default,
-                _ => ElementTheme.Default
+                _ => ElementTheme.Dark  // Default to dark
             };
+        }
+    }
+
+    private static void UpdateResourceBrush(ResourceDictionary resources, string key, Color color)
+    {
+        if (resources.TryGetValue(key, out var existing) && existing is SolidColorBrush brush)
+        {
+            brush.Color = color;
+        }
+        else
+        {
+            resources[key] = new SolidColorBrush(color);
         }
     }
 }

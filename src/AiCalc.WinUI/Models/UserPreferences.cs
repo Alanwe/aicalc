@@ -8,9 +8,9 @@ namespace AiCalc.Models;
 public class UserPreferences
 {
     /// <summary>
-    /// Application theme: Light, Dark, or System
+    /// Application theme: Light or Dark
     /// </summary>
-    public string Theme { get; set; } = "System";
+    public string Theme { get; set; } = "Dark";
 
     /// <summary>
     /// Width of the Functions panel (0 = collapsed)

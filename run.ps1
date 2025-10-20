@@ -7,6 +7,9 @@ param(
 )
 
 Write-Host "Building AiCalc Studio..." -ForegroundColor Cyan
+# Ensure any running instance is terminated so publish can replace files
+Stop-Process -Name "AiCalc.WinUI" -Force -ErrorAction SilentlyContinue
+Start-Sleep -Seconds 1
 dotnet publish src/AiCalc.WinUI/AiCalc.WinUI.csproj -c $Configuration -r win-$Platform --self-contained /p:Platform=$Platform
 
 if ($LASTEXITCODE -eq 0) {

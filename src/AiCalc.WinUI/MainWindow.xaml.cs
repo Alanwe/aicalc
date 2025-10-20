@@ -46,6 +46,9 @@ public sealed partial class MainWindow : Page
     private bool _isNavigatingBetweenCells = false;
     private int? _columnContextIndex;
     private int? _rowContextIndex;
+    // Reduced default row height further (20% reduction from 32)
+    private const double DefaultRowHeight = 26;
+    private const double ColumnWidthScale = 0.84; // reduce cell width by 16%
 
     public MainWindow()
     {
@@ -65,6 +68,14 @@ public sealed partial class MainWindow : Page
         InitializeFunctionSuggestions();
         RefreshSheetTabs();
         LoadPreferences();  // Load user preferences (Phase 5)
+        
+        // Initialize theme toggle button text
+        var prefs = App.PreferencesService.LoadPreferences();
+        var currentTheme = prefs.Theme ?? "Dark";
+        if (ThemeToggleButton != null)
+        {
+            ThemeToggleButton.Content = currentTheme == "Light" ? "🌙 Dark" : "☀️ Light";
+        }
 
         ViewModel.Settings.Connections.CollectionChanged += SettingsConnections_CollectionChanged;
         
@@ -106,16 +117,22 @@ public sealed partial class MainWindow : Page
             };
             
             var stack = new StackPanel { Spacing = 4 };
+            // Use very dark text for light theme readability
+            var textPrimaryBrush = Application.Current.Resources["TextPrimaryBrush"] as SolidColorBrush
+                ?? new SolidColorBrush(Color.FromArgb(0xFF, 0x00, 0x00, 0x00)); // Pure black fallback
             stack.Children.Add(new TextBlock
             {
                 Text = $"{GetCategoryGlyph(func.Category)} {func.Name}",
-                Foreground = new SolidColorBrush(Microsoft.UI.Colors.White),
-                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
+                Foreground = textPrimaryBrush,
+                FontWeight = Microsoft.UI.Text.FontWeights.Bold,
+                FontSize = 13
             });
+            var textSecondaryBrush = Application.Current.Resources["TextSecondaryBrush"] as SolidColorBrush
+                ?? new SolidColorBrush(Color.FromArgb(0xFF, 0x61, 0x61, 0x61)); // Medium gray fallback
             stack.Children.Add(new TextBlock
             {
                 Text = func.Description,
-                Foreground = new SolidColorBrush(Color.FromArgb(0xAA, 0xFF, 0xFF, 0xFF)),
+                Foreground = textSecondaryBrush,
                 FontSize = 12,
                 TextWrapping = TextWrapping.Wrap
             });
@@ -125,10 +142,12 @@ public sealed partial class MainWindow : Page
                 var providerHint = BuildProviderHint(func, App.AIServices.GetDefaultConnection());
                 if (!string.IsNullOrWhiteSpace(providerHint))
                 {
+                    var hintBrush = Application.Current.Resources["TextSecondaryBrush"] as SolidColorBrush
+                        ?? new SolidColorBrush(Color.FromArgb(0x88, 0xFF, 0xFF, 0xFF));
                     stack.Children.Add(new TextBlock
                     {
                         Text = providerHint,
-                        Foreground = new SolidColorBrush(Color.FromArgb(0x88, 0xFF, 0xFF, 0xFF)),
+                        Foreground = hintBrush,
                         FontSize = 11
                     });
                 }
@@ -378,13 +397,53 @@ public sealed partial class MainWindow : Page
         SpreadsheetGrid.ColumnDefinitions.Clear();
 
         var visibleRows = sheet.GetVisibleRowIndices().ToList();
-        var visibleColumns = sheet.GetVisibleColumnIndices().ToList();
+
+        // If the spreadsheet viewport is available, grow the sheet to fill the remaining visible area
+        if (SpreadsheetScrollViewer != null && SpreadsheetScrollViewer.ActualHeight > 0)
+        {
+            // Calculate how many rows fit in the viewport (subtracting header and margins)
+            double viewportHeight = SpreadsheetScrollViewer.ActualHeight - 48; // header + padding
+            int rowsVisible = Math.Max(5, (int)Math.Floor(viewportHeight / DefaultRowHeight));
+            if (rowsVisible > visibleRows.Count)
+            {
+                sheet.EnsureCapacity(rowsVisible + 2, sheet.ColumnCount);
+                visibleRows = sheet.GetVisibleRowIndices().ToList();
+            }
+        }
+
+    var visibleColumns = sheet.GetVisibleColumnIndices().ToList();
+
+    // Also ensure enough columns to fill the viewport width
+        if (SpreadsheetScrollViewer != null && SpreadsheetScrollViewer.ActualWidth > 0)
+        {
+            double availableWidth = Math.Max(0, SpreadsheetScrollViewer.ActualWidth - 48 - 24); // subtract row header and margins
+            // Calculate used width for existing visible columns
+            double usedWidth = 0;
+            foreach (var columnIndex in visibleColumns)
+            {
+                var w = sheet.ColumnWidths.Count > columnIndex ? sheet.ColumnWidths[columnIndex] : SheetViewModel.DefaultColumnWidth;
+                usedWidth += Math.Max(40, w * ColumnWidthScale);
+            }
+
+            if (usedWidth < availableWidth)
+            {
+                var avgWidth = sheet.ColumnWidths.Count > 0 ? sheet.ColumnWidths.Average() * ColumnWidthScale : SheetViewModel.DefaultColumnWidth * ColumnWidthScale;
+                var deficit = availableWidth - usedWidth;
+                var additional = (int)Math.Ceiling(deficit / Math.Max(1, avgWidth));
+                if (additional > 0)
+                {
+                    sheet.EnsureCapacity(sheet.Rows.Count, sheet.ColumnCount + additional + 2);
+                    visibleColumns = sheet.GetVisibleColumnIndices().ToList();
+                }
+            }
+        }
+        
 
         // Header row plus visible row slots
         SpreadsheetGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(32) });
         foreach (var _ in visibleRows)
         {
-            SpreadsheetGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(70) });
+            SpreadsheetGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(DefaultRowHeight) });
         }
 
         // Row header column plus visible column slots
@@ -394,33 +453,49 @@ public sealed partial class MainWindow : Page
             var width = sheet.ColumnWidths.Count > columnIndex
                 ? sheet.ColumnWidths[columnIndex]
                 : SheetViewModel.DefaultColumnWidth;
-            SpreadsheetGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(width) });
+            // Apply display scale to column widths
+            var displayWidth = Math.Max(40, width * ColumnWidthScale);
+            SpreadsheetGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(displayWidth) });
         }
 
         // Top-left corner
+        var cornerBrush = Application.Current.Resources["HeaderBackgroundBrush"] as SolidColorBrush
+            ?? new SolidColorBrush(Color.FromArgb(0xFF, 0x2D, 0x2D, 0x30));
         AddCell(new Border
         {
-            Background = new SolidColorBrush(Color.FromArgb(0xFF, 0x25, 0x25, 0x26)),
-            CornerRadius = new CornerRadius(4),
-            Margin = new Thickness(2)
+            Background = cornerBrush,
+            CornerRadius = new CornerRadius(2),
+            Margin = new Thickness(1),
+            BorderBrush = Application.Current.Resources["GridLineColor"] as SolidColorBrush,
+            BorderThickness = new Thickness(0, 0, 1, 1)
         }, 0, 0);
 
         // Column headers
+        var headerBrush = Application.Current.Resources["HeaderBackgroundBrush"] as SolidColorBrush
+            ?? new SolidColorBrush(Color.FromArgb(0xFF, 0x2D, 0x2D, 0x30));
+        var headerTextBrush = Application.Current.Resources["TextSecondaryBrush"] as SolidColorBrush
+            ?? new SolidColorBrush(Color.FromArgb(0xFF, 0x80, 0x80, 0x80));
+        var gridLineBrush = Application.Current.Resources["GridLineColor"] as SolidColorBrush
+            ?? new SolidColorBrush(Color.FromArgb(0xFF, 0x2D, 0x2D, 0x30));
+        
         for (int position = 0; position < visibleColumns.Count; position++)
         {
             var columnIndex = visibleColumns[position];
             var header = new Border
             {
-                Background = new SolidColorBrush(Color.FromArgb(0xFF, 0x25, 0x25, 0x26)),
-                CornerRadius = new CornerRadius(4),
-                Margin = new Thickness(2),
+                Background = headerBrush,
+                CornerRadius = new CornerRadius(0),
+                Margin = new Thickness(0),
+                BorderBrush = gridLineBrush,
+                BorderThickness = new Thickness(0, 0, 1, 1),
                 Child = new TextBlock
                 {
                     Text = sheet.ColumnHeaders[columnIndex],
-                    Foreground = new SolidColorBrush(Color.FromArgb(0xCC, 0xFF, 0xFF, 0xFF)),
+                    Foreground = headerTextBrush,
                     HorizontalAlignment = HorizontalAlignment.Center,
                     VerticalAlignment = VerticalAlignment.Center,
-                    FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
+                    FontWeight = Microsoft.UI.Text.FontWeights.Normal,
+                    FontSize = 12
                 }
             };
             header.Tag = columnIndex;
@@ -437,16 +512,19 @@ public sealed partial class MainWindow : Page
 
             var rowHeader = new Border
             {
-                Background = new SolidColorBrush(Color.FromArgb(0xFF, 0x25, 0x25, 0x26)),
-                CornerRadius = new CornerRadius(4),
-                Margin = new Thickness(2),
+                Background = headerBrush,
+                CornerRadius = new CornerRadius(0),
+                Margin = new Thickness(0),
+                BorderBrush = gridLineBrush,
+                BorderThickness = new Thickness(0, 0, 1, 1),
                 Child = new TextBlock
                 {
                     Text = rowVm.Label,
-                    Foreground = new SolidColorBrush(Color.FromArgb(0xCC, 0xFF, 0xFF, 0xFF)),
+                    Foreground = headerTextBrush,
                     HorizontalAlignment = HorizontalAlignment.Center,
                     VerticalAlignment = VerticalAlignment.Center,
-                    FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
+                    FontWeight = Microsoft.UI.Text.FontWeights.Normal,
+                    FontSize = 12
                 }
             };
             rowHeader.Tag = rowIndex;
@@ -475,14 +553,20 @@ public sealed partial class MainWindow : Page
 
     private Button CreateCellButton(CellViewModel cellVm)
     {
+        // Use CellThemeBackgroundBrush which respects the active theme
+        var cellBgBrush = Application.Current.Resources["CellThemeBackgroundBrush"] as SolidColorBrush
+            ?? new SolidColorBrush(Color.FromArgb(0xFF, 0x25, 0x25, 0x26));
+        var gridLineBrush = Application.Current.Resources["GridLineColor"] as SolidColorBrush
+            ?? new SolidColorBrush(Color.FromArgb(0xFF, 0x2D, 0x2D, 0x30));
+        
         var button = new Button
         {
-            Background = new SolidColorBrush(Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF)),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(0x44, 0xFF, 0xFF, 0xFF)),
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(6),
-            Margin = new Thickness(2),
-            Padding = new Thickness(10),
+            Background = cellBgBrush,
+            BorderBrush = gridLineBrush,
+            BorderThickness = new Thickness(0, 0, 1, 1),
+            CornerRadius = new CornerRadius(0),
+            Margin = new Thickness(0),
+            Padding = new Thickness(4, 0, 4, 0),
             HorizontalAlignment = HorizontalAlignment.Stretch,
             VerticalAlignment = VerticalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
@@ -493,13 +577,16 @@ public sealed partial class MainWindow : Page
         var stack = new StackPanel { Spacing = 6 };
         
         // Show value directly without cell label
-        var valueText = new TextBlock
-        {
-            Text = cellVm.DisplayValue,
-            Foreground = new SolidColorBrush(Colors.White),
-            FontSize = 13,
-            TextWrapping = TextWrapping.Wrap,
-            MaxLines = 3,
+        var textBrush = Application.Current.Resources["TextPrimaryBrush"] as SolidColorBrush
+            ?? new SolidColorBrush(Color.FromArgb(0xFF, 0xCC, 0xCC, 0xCC));
+        
+            var valueText = new TextBlock
+            {
+                Text = cellVm.DisplayValue,
+                Foreground = textBrush,
+                FontSize = 10,
+                TextWrapping = TextWrapping.NoWrap,
+                MaxLines = 1,
             TextTrimming = TextTrimming.CharacterEllipsis,
             VerticalAlignment = VerticalAlignment.Center
         };
@@ -1375,8 +1462,29 @@ public sealed partial class MainWindow : Page
         // Position the edit box over the cell
         var buttonPos = button.TransformToVisual(SpreadsheetGrid).TransformPoint(new Windows.Foundation.Point(0, 0));
         
-        CellEditBox.Width = button.ActualWidth;
-        CellEditBox.Height = button.ActualHeight;
+        // Make edit box smaller: reduce by 75% relative to previous size
+        double minWidth = Math.Max(75, button.ActualWidth * 0.25);
+        double maxWidth = 175; // 700 * 0.25
+        double availableWidth = (SpreadsheetGrid.ActualWidth - buttonPos.X - 16) * 0.25;
+        if (availableWidth > 0)
+        {
+            CellEditBox.Width = Math.Min(maxWidth, Math.Max(minWidth, availableWidth));
+        }
+        else
+        {
+            CellEditBox.Width = Math.Min(maxWidth, minWidth);
+        }
+
+        double desiredHeight = 35; // 140 * 0.25
+        double availableHeight = (SpreadsheetGrid.ActualHeight - buttonPos.Y - 16) * 0.25;
+        if (availableHeight > 0)
+        {
+            CellEditBox.Height = Math.Min(105, Math.Max(desiredHeight, Math.Min(availableHeight, desiredHeight)));
+        }
+        else
+        {
+            CellEditBox.Height = desiredHeight;
+        }
         CellEditBox.Margin = new Thickness(buttonPos.X, buttonPos.Y, 0, 0);
         CellEditBox.HorizontalAlignment = HorizontalAlignment.Left;
         CellEditBox.VerticalAlignment = VerticalAlignment.Top;
@@ -2187,6 +2295,37 @@ public sealed partial class MainWindow : Page
         return null;
     }
 
+    private void ThemeToggle_Click(object sender, RoutedEventArgs e)
+    {
+        // Simple, reliable theme toggle
+        var prefs = App.PreferencesService.LoadPreferences();
+        var currentTheme = prefs.Theme ?? "Dark";
+        var newTheme = currentTheme == "Light" ? "Dark" : "Light";
+        
+        // Save preference
+        prefs.Theme = newTheme;
+        App.PreferencesService.SavePreferences(prefs);
+        
+    // Apply theme
+        App.ApplyApplicationTheme(newTheme == "Light" ? AppTheme.Light : AppTheme.Dark);
+    App.ApplyCellStateTheme(newTheme == "Light" ? CellVisualTheme.Light : CellVisualTheme.Dark);
+        
+        // Refresh UI
+        RefreshFunctionCatalog();
+        if (ViewModel.SelectedSheet != null)
+        {
+            BuildSpreadsheetGrid(ViewModel.SelectedSheet);
+        }
+        
+        // Update button text
+        if (ThemeToggleButton != null)
+        {
+            ThemeToggleButton.Content = newTheme == "Light" ? "🌙 Dark" : "☀️ Light";
+        }
+        
+        ViewModel.StatusMessage = $"Theme: {newTheme}";
+    }
+
     private async void SettingsButton_Click(object sender, RoutedEventArgs e)
     {
         // Show full settings dialog with Performance and Appearance tabs (Task 9 & 10)
@@ -2316,6 +2455,14 @@ public sealed partial class MainWindow : Page
         if (e.Key == Windows.System.VirtualKey.Tab)
         {
             MoveSelection(shift ? -1 : 1, 0);
+            e.Handled = true;
+            return;
+        }
+
+        // Ctrl+T: Toggle Light/Dark Theme - delegate to button
+        if (ctrl && e.Key == Windows.System.VirtualKey.T)
+        {
+            ThemeToggle_Click(this, new RoutedEventArgs());
             e.Handled = true;
             return;
         }
