@@ -33,6 +33,19 @@ public sealed partial class MainWindow : Page
     private CellViewModel? _formulaEditTargetCell;
     private readonly List<(CellViewModel Cell, CellVisualState PreviousState)> _formulaHighlights = new();
     private readonly List<CellViewModel> _multiSelection = new();
+    private readonly Dictionary<CellObjectType, StackPanel> _functionGroups = new();
+    private readonly Dictionary<CellObjectType, Button> _functionHeaders = new();
+    private readonly List<CellObjectType> _functionGroupOrder = new()
+    {
+        CellObjectType.Text,
+        CellObjectType.Number,
+        CellObjectType.Image,
+        CellObjectType.Directory,
+        CellObjectType.File,
+        CellObjectType.Table,
+        CellObjectType.DateTime,
+        CellObjectType.Json
+    };
     private CellViewModel? _selectionAnchor;
     private bool _isLeftSplitterDragging;
     private bool _isRightSplitterDragging;
@@ -107,54 +120,137 @@ public sealed partial class MainWindow : Page
     private void LoadFunctionsList()
     {
         FunctionsList.Children.Clear();
-        foreach (var func in GetAvailableFunctions())
-        {
-            var border = new Border
-            {
-                Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
-                Padding = new Thickness(8),
-                CornerRadius = new CornerRadius(4)
-            };
-            
-            var stack = new StackPanel { Spacing = 4 };
-            // Use very dark text for light theme readability
-            var textPrimaryBrush = Application.Current.Resources["TextPrimaryBrush"] as SolidColorBrush
-                ?? new SolidColorBrush(Color.FromArgb(0xFF, 0x00, 0x00, 0x00)); // Pure black fallback
-            stack.Children.Add(new TextBlock
-            {
-                Text = $"{GetCategoryGlyph(func.Category)} {func.Name}",
-                Foreground = textPrimaryBrush,
-                FontWeight = Microsoft.UI.Text.FontWeights.Bold,
-                FontSize = 13
-            });
-            var textSecondaryBrush = Application.Current.Resources["TextSecondaryBrush"] as SolidColorBrush
-                ?? new SolidColorBrush(Color.FromArgb(0xFF, 0x61, 0x61, 0x61)); // Medium gray fallback
-            stack.Children.Add(new TextBlock
-            {
-                Text = func.Description,
-                Foreground = textSecondaryBrush,
-                FontSize = 12,
-                TextWrapping = TextWrapping.Wrap
-            });
+        _functionGroups.Clear();
 
-            if (func.Category == FunctionCategory.AI)
+        var available = GetAvailableFunctions().ToList();
+        foreach (var type in _functionGroupOrder)
+        {
+            var funcs = available.Where(f => f.CanAccept(type)).OrderBy(f => f.Name).ToList();
+
+            // Group header
+            var textPrimaryBrush = Application.Current.Resources["TextPrimaryBrush"] as SolidColorBrush
+                ?? new SolidColorBrush(Color.FromArgb(0xFF, 0xFF, 0xFF, 0xFF));
+            var headerButton = new Button
             {
-                var providerHint = BuildProviderHint(func, App.AIServices.GetDefaultConnection());
-                if (!string.IsNullOrWhiteSpace(providerHint))
+                Content = new StackPanel
                 {
-                    var hintBrush = Application.Current.Resources["TextSecondaryBrush"] as SolidColorBrush
-                        ?? new SolidColorBrush(Color.FromArgb(0x88, 0xFF, 0xFF, 0xFF));
-                    stack.Children.Add(new TextBlock
+                    Orientation = Orientation.Horizontal,
+                    Spacing = 8,
+                    Children =
                     {
-                        Text = providerHint,
-                        Foreground = hintBrush,
-                        FontSize = 11
-                    });
+                        new TextBlock {
+                            Text = GetCellObjectTypeLabel(type),
+                            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                            Foreground = textPrimaryBrush
+                        },
+                        new TextBlock {
+                            Text = $"({funcs.Count})",
+                            Foreground = Application.Current.Resources["TextSecondaryBrush"] as SolidColorBrush
+                        }
+                    }
+                },
+                Background = new SolidColorBrush(Color.FromArgb(0x00, 0x00, 0x00, 0x00)),
+                BorderThickness = new Thickness(0),
+                HorizontalContentAlignment = HorizontalAlignment.Left,
+                Padding = new Thickness(6)
+            };
+
+            var groupPanel = new StackPanel { Spacing = 6, Margin = new Thickness(4, 0, 0, 12), Visibility = Visibility.Collapsed };
+            _functionGroups[type] = groupPanel;
+            _functionHeaders[type] = headerButton;
+
+            headerButton.Click += (s, e) =>
+            {
+                // Toggle this group's visibility
+                if (_functionGroups.TryGetValue(type, out var groupPanel))
+                {
+                    groupPanel.Visibility = groupPanel.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
                 }
+            };
+
+            // Populate functions
+            foreach (var func in funcs)
+            {
+                var item = CreateFunctionItem(func);
+                groupPanel.Children.Add(item);
             }
-            
-            border.Child = stack;
-            FunctionsList.Children.Add(border);
+
+            FunctionsList.Children.Add(headerButton);
+            FunctionsList.Children.Add(groupPanel);
+        }
+    }
+
+    private string GetCellObjectTypeLabel(CellObjectType type)
+    {
+        return type switch
+        {
+            CellObjectType.Text => "Text",
+            CellObjectType.Number => "Number",
+            CellObjectType.Image => "Image",
+            CellObjectType.Directory => "Directory",
+            CellObjectType.File => "File",
+            CellObjectType.Table => "Table",
+            CellObjectType.DateTime => "Date/Time",
+            CellObjectType.Json => "JSON",
+            _ => type.ToString()
+        };
+    }
+
+    private Border CreateFunctionItem(FunctionDescriptor func)
+    {
+        var border = new Border
+        {
+            Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
+            Padding = new Thickness(4, 2, 4, 2),
+            CornerRadius = new CornerRadius(2)
+        };
+
+        var stack = new StackPanel { Spacing = 1 };
+        var textPrimaryBrush = Application.Current.Resources["TextPrimaryBrush"] as SolidColorBrush
+            ?? new SolidColorBrush(Color.FromArgb(0xFF, 0x00, 0x00, 0x00));
+        stack.Children.Add(new TextBlock
+        {
+            Text = $"{GetCategoryGlyph(func.Category)} {func.Name}",
+            Foreground = textPrimaryBrush,
+            FontWeight = Microsoft.UI.Text.FontWeights.Bold,
+            FontSize = 10
+        });
+        var textSecondaryBrush = Application.Current.Resources["TextSecondaryBrush"] as SolidColorBrush
+            ?? new SolidColorBrush(Color.FromArgb(0xFF, 0x61, 0x61, 0x61));
+        stack.Children.Add(new TextBlock
+        {
+            Text = func.Description,
+            Foreground = textSecondaryBrush,
+            FontSize = 9,
+            TextWrapping = TextWrapping.Wrap
+        });
+
+        if (func.Category == FunctionCategory.AI)
+        {
+            var providerHint = BuildProviderHint(func, App.AIServices.GetDefaultConnection());
+            if (!string.IsNullOrWhiteSpace(providerHint))
+            {
+                var hintBrush = Application.Current.Resources["TextSecondaryBrush"] as SolidColorBrush
+                    ?? new SolidColorBrush(Color.FromArgb(0x88, 0xFF, 0xFF, 0xFF));
+                stack.Children.Add(new TextBlock
+                {
+                    Text = providerHint,
+                    Foreground = hintBrush,
+                    FontSize = 8
+                });
+            }
+        }
+
+        border.Child = stack;
+        return border;
+    }
+
+    private void FocusFunctionGroupForCellType(CellObjectType type)
+    {
+        // Optionally, keep this for auto-expansion on cell selection, but do not collapse other groups
+        if (_functionGroups.TryGetValue(type, out var groupPanel))
+        {
+            groupPanel.Visibility = Visibility.Visible;
         }
     }
 
@@ -375,11 +471,43 @@ public sealed partial class MainWindow : Page
         SheetTabs.TabItems.Clear();
         foreach (var sheet in ViewModel.Sheets)
         {
+            var headerText = new TextBlock
+            {
+                Text = sheet.Name
+            };
+            // Default to theme-aware primary text for non-selected tabs
+            var themePrimary = Application.Current.Resources["TextPrimaryBrush"] as SolidColorBrush;
+            headerText.Foreground = themePrimary ?? new SolidColorBrush(Colors.White);
+            // If this is the selected sheet, adjust for dark theme to ensure readability on light tab background
+            var prefs = App.PreferencesService.LoadPreferences();
+            var currentTheme = prefs.Theme ?? "Dark";
+            if (ViewModel.SelectedSheet == sheet && currentTheme == "Dark")
+            {
+                headerText.Foreground = new SolidColorBrush(Color.FromArgb(0xFF, 0x1E, 0x1E, 0x1E));
+            }
             var tab = new TabViewItem
             {
-                Header = sheet.Name,
+                Header = headerText,
                 Tag = sheet
             };
+
+            // Enable double-click to rename
+            tab.DoubleTapped += (s, e) =>
+            {
+                e.Handled = true;
+                ShowRenameDialog(sheet);
+            };
+
+            // Context menu for Rename/Delete
+            var flyout = new MenuFlyout();
+            var renameItem = new MenuFlyoutItem { Text = "Rename" };
+            renameItem.Click += (s, e) => ShowRenameDialog(sheet);
+            var deleteItem = new MenuFlyoutItem { Text = "Delete" };
+            deleteItem.Click += (s, e) => ShowDeleteConfirm(sheet);
+            flyout.Items.Add(renameItem);
+            flyout.Items.Add(deleteItem);
+            FlyoutBase.SetAttachedFlyout(tab, flyout);
+            tab.RightTapped += (s, e) => FlyoutBase.ShowAttachedFlyout(tab);
             SheetTabs.TabItems.Add(tab);
         }
         
@@ -932,6 +1060,11 @@ public sealed partial class MainWindow : Page
         {
             UpdateParameterHints();
         }
+
+        // Focus function group for the selected cell's type
+        var cellType = _selectedCell?.Value.ObjectType ?? CellObjectType.Text;
+        cellType = NormalizeCellObjectType(cellType);
+        FocusFunctionGroupForCellType(cellType);
     }
 
     private Button? FindButtonForCell(CellViewModel? cell)
@@ -1069,16 +1202,27 @@ public sealed partial class MainWindow : Page
         if (_multiSelection.Count > 1)
         {
             CellLabel.Text = $"{GetSelectionRangeLabel()} ({_multiSelection.Count} cells)";
+            CellClassTypeLabel.Text = "";
         }
-        else
+        else if (cell != null)
         {
             CellLabel.Text = cell.DisplayLabel;
+            var typeLabel = GetCellObjectTypeLabel(cell.Value.ObjectType);
+            CellClassTypeLabel.Text = $"Type: {typeLabel}";
         }
 
-    CellValueBox.Text = cell.RawValue ?? string.Empty;
-    CellFormulaBox.Text = cell.Formula ?? string.Empty;
-    CellNotesBox.Text = cell.Notes ?? string.Empty;
-        AutomationModeBox.SelectedIndex = (int)cell.AutomationMode;
+    // When editing a string that looks like a number, prefix with '
+    if (cell != null && cell.Value != null && cell.Value.ObjectType == CellObjectType.Text && double.TryParse(cell.RawValue, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out _))
+    {
+        CellValueBox.Text = "'" + (cell.RawValue ?? string.Empty);
+    }
+    else
+    {
+        CellValueBox.Text = cell?.RawValue ?? string.Empty;
+    }
+    CellFormulaBox.Text = cell?.Formula ?? string.Empty;
+    CellNotesBox.Text = cell?.Notes ?? string.Empty;
+    AutomationModeBox.SelectedIndex = (int)(cell?.AutomationMode ?? CellAutomationMode.Manual);
 
         _isUpdatingCell = false;
     }
@@ -1449,7 +1593,7 @@ public sealed partial class MainWindow : Page
         _columnContextIndex = null;
     }
 
-    private void StartDirectEdit(CellViewModel cell, Button button)
+    private void StartDirectEdit(CellViewModel cell, Button button, string? initialCharacter = null)
     {
         // Only allow direct edit for text/empty cells (not images, directories, etc.)
         if (cell.Value.ObjectType != CellObjectType.Text && 
@@ -1489,11 +1633,27 @@ public sealed partial class MainWindow : Page
         CellEditBox.HorizontalAlignment = HorizontalAlignment.Left;
         CellEditBox.VerticalAlignment = VerticalAlignment.Top;
         
-        CellEditBox.Text = cell.RawValue;
         CellEditBox.Tag = cell;
         CellEditBox.Visibility = Visibility.Visible;
-        CellEditBox.Focus(FocusState.Programmatic);
-        CellEditBox.SelectAll();
+        
+        // If an initial character was provided, replace the content with it
+        if (!string.IsNullOrEmpty(initialCharacter))
+        {
+            CellEditBox.Text = initialCharacter;
+            CellEditBox.Focus(FocusState.Programmatic);
+            // Use dispatcher to ensure selection is cleared after focus events complete
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                CellEditBox.SelectionStart = CellEditBox.Text.Length;
+                CellEditBox.SelectionLength = 0;
+            });
+        }
+        else
+        {
+            CellEditBox.Text = cell.RawValue ?? string.Empty;
+            CellEditBox.Focus(FocusState.Programmatic);
+            CellEditBox.SelectAll();
+        }
     }
 
     private void CellEditBox_LostFocus(object sender, RoutedEventArgs e)
@@ -1610,11 +1770,51 @@ public sealed partial class MainWindow : Page
             ViewModel.SelectedSheet = sheet;
             BuildSpreadsheetGrid(sheet);
         }
+
+        // Update header colors to make sure selected tab is readable
+        var prefs = App.PreferencesService.LoadPreferences();
+        var currentTheme = prefs.Theme ?? "Dark";
+        foreach (var item in SheetTabs.TabItems.OfType<TabViewItem>())
+        {
+            if (item.Header is TextBlock tb && item.Tag is SheetViewModel s)
+            {
+                if (ViewModel.SelectedSheet == s && currentTheme == "Dark")
+                {
+                    tb.Foreground = new SolidColorBrush(Color.FromArgb(0xFF, 0x1E, 0x1E, 0x1E));
+                }
+                else
+                {
+                    tb.Foreground = Application.Current.Resources["TextPrimaryBrush"] as SolidColorBrush ?? new SolidColorBrush(Colors.White);
+                }
+            }
+        }
     }
 
-    private void AddTab_Click(TabView sender, object args)
+    private async void SheetTabs_TabCloseRequested(TabView sender, TabViewTabCloseRequestedEventArgs args)
     {
-        NewSheetButton_Click(sender, null!);
+        if (args.Item is TabViewItem tab && tab.Tag is SheetViewModel sheet)
+        {
+            var dialog = new ContentDialog
+            {
+                Title = "Delete Sheet",
+                Content = $"Are you sure you want to delete sheet '{sheet.Name}'?",
+                PrimaryButtonText = "Delete",
+                CloseButtonText = "Cancel",
+                DefaultButton = ContentDialogButton.Primary,
+                XamlRoot = this.Content.XamlRoot
+            };
+            var result = await dialog.ShowAsync();
+            if (result == ContentDialogResult.Primary)
+            {
+                ViewModel.Sheets.Remove(sheet);
+                if (ViewModel.Sheets.Count == 0)
+                {
+                    ViewModel.AddSheet();
+                }
+                ViewModel.SelectedSheet = ViewModel.Sheets.FirstOrDefault();
+                RefreshSheetTabs();
+            }
+        }
     }
 
     private void NewSheetButton_Click(object sender, RoutedEventArgs e)
@@ -1622,6 +1822,60 @@ public sealed partial class MainWindow : Page
         ViewModel.NewSheetCommand.Execute(null);
         RefreshSheetTabs();
         SheetTabs.SelectedIndex = SheetTabs.TabItems.Count - 1;
+    }
+
+    private async void ShowRenameDialog(SheetViewModel sheet)
+    {
+        var textbox = new TextBox { Text = sheet.Name, Width = 240 };
+        var dialog = new ContentDialog
+        {
+            Title = "Rename Sheet",
+            Content = new StackPanel { Children = { textbox } },
+            PrimaryButtonText = "Rename",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = this.Content.XamlRoot
+        };
+
+        var result = await dialog.ShowAsync();
+        if (result == ContentDialogResult.Primary)
+        {
+            var newName = textbox.Text?.Trim();
+            if (!string.IsNullOrEmpty(newName) && ViewModel.GetSheet(newName) == null)
+            {
+                sheet.Rename(newName);
+                RefreshSheetTabs();
+            }
+            else
+            {
+                ViewModel.StatusMessage = "Invalid or duplicate sheet name";
+            }
+        }
+    }
+
+    private async void ShowDeleteConfirm(SheetViewModel sheet)
+    {
+        var dialog = new ContentDialog
+        {
+            Title = "Delete Sheet",
+            Content = $"Are you sure you want to delete sheet '{sheet.Name}'?",
+            PrimaryButtonText = "Delete",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = this.Content.XamlRoot
+        };
+
+        var result = await dialog.ShowAsync();
+        if (result == ContentDialogResult.Primary)
+        {
+            ViewModel.Sheets.Remove(sheet);
+            if (ViewModel.Sheets.Count == 0)
+            {
+                ViewModel.AddSheet();
+            }
+            ViewModel.SelectedSheet = ViewModel.Sheets.FirstOrDefault();
+            RefreshSheetTabs();
+        }
     }
 
     private void SaveButton_Click(object sender, RoutedEventArgs e)
@@ -2503,6 +2757,18 @@ public sealed partial class MainWindow : Page
             return;
         }
         
+        // Regular keyboard input: Start editing the cell (only if not already editing)
+        if (!ctrl && !shift && IsRegularKeyboardKey(e.Key) && CellEditBox.Visibility != Visibility.Visible)
+        {
+            if (_selectedCell != null && _selectedButton != null)
+            {
+                var charToAdd = VirtualKeyToString(e.Key);
+                StartDirectEdit(_selectedCell, _selectedButton, charToAdd);
+                e.Handled = true;
+                return;
+            }
+        }
+        
         // Delete: Clear cell contents
         if (e.Key == Windows.System.VirtualKey.Delete && _selectedCell != null)
         {
@@ -2618,6 +2884,88 @@ public sealed partial class MainWindow : Page
             }
         }
         return null;
+    }
+    
+    /// <summary>
+    /// Convert a VirtualKey to its string representation
+    /// </summary>
+    private string VirtualKeyToString(Windows.System.VirtualKey key)
+    {
+        return key switch
+        {
+            Windows.System.VirtualKey.Space => " ",
+            Windows.System.VirtualKey.Number0 => "0",
+            Windows.System.VirtualKey.Number1 => "1",
+            Windows.System.VirtualKey.Number2 => "2",
+            Windows.System.VirtualKey.Number3 => "3",
+            Windows.System.VirtualKey.Number4 => "4",
+            Windows.System.VirtualKey.Number5 => "5",
+            Windows.System.VirtualKey.Number6 => "6",
+            Windows.System.VirtualKey.Number7 => "7",
+            Windows.System.VirtualKey.Number8 => "8",
+            Windows.System.VirtualKey.Number9 => "9",
+            Windows.System.VirtualKey.A => "a",
+            Windows.System.VirtualKey.B => "b",
+            Windows.System.VirtualKey.C => "c",
+            Windows.System.VirtualKey.D => "d",
+            Windows.System.VirtualKey.E => "e",
+            Windows.System.VirtualKey.F => "f",
+            Windows.System.VirtualKey.G => "g",
+            Windows.System.VirtualKey.H => "h",
+            Windows.System.VirtualKey.I => "i",
+            Windows.System.VirtualKey.J => "j",
+            Windows.System.VirtualKey.K => "k",
+            Windows.System.VirtualKey.L => "l",
+            Windows.System.VirtualKey.M => "m",
+            Windows.System.VirtualKey.N => "n",
+            Windows.System.VirtualKey.O => "o",
+            Windows.System.VirtualKey.P => "p",
+            Windows.System.VirtualKey.Q => "q",
+            Windows.System.VirtualKey.R => "r",
+            Windows.System.VirtualKey.S => "s",
+            Windows.System.VirtualKey.T => "t",
+            Windows.System.VirtualKey.U => "u",
+            Windows.System.VirtualKey.V => "v",
+            Windows.System.VirtualKey.W => "w",
+            Windows.System.VirtualKey.X => "x",
+            Windows.System.VirtualKey.Y => "y",
+            Windows.System.VirtualKey.Z => "z",
+            Windows.System.VirtualKey.Multiply => "*",
+            Windows.System.VirtualKey.Add => "+",
+            Windows.System.VirtualKey.Subtract => "-",
+            Windows.System.VirtualKey.Divide => "/",
+            Windows.System.VirtualKey.Decimal => ".",
+            _ => ""
+        };
+    }
+    
+    /// <summary>
+    /// Check if a key is a regular qwerty key (excluding function keys, WIN, etc)
+    /// </summary>
+    private bool IsRegularKeyboardKey(Windows.System.VirtualKey key)
+    {
+        // Exclude function keys (F1-F12)
+        if (key >= Windows.System.VirtualKey.F1 && key <= Windows.System.VirtualKey.F12)
+            return false;
+        
+        // Exclude navigation keys (already handled separately)
+        if (key == Windows.System.VirtualKey.Up || key == Windows.System.VirtualKey.Down ||
+            key == Windows.System.VirtualKey.Left || key == Windows.System.VirtualKey.Right ||
+            key == Windows.System.VirtualKey.Tab || key == Windows.System.VirtualKey.Enter ||
+            key == Windows.System.VirtualKey.Escape || key == Windows.System.VirtualKey.Delete ||
+            key == Windows.System.VirtualKey.Home || key == Windows.System.VirtualKey.End ||
+            key == Windows.System.VirtualKey.PageUp || key == Windows.System.VirtualKey.PageDown)
+            return false;
+        
+        // Exclude special keys
+        if (key == Windows.System.VirtualKey.LeftWindows || key == Windows.System.VirtualKey.RightWindows ||
+            key == Windows.System.VirtualKey.Application ||
+            key == Windows.System.VirtualKey.LeftMenu || key == Windows.System.VirtualKey.RightMenu ||
+            key == Windows.System.VirtualKey.CapitalLock || key == Windows.System.VirtualKey.Scroll)
+            return false;
+        
+        // Everything else is considered a regular key (letters, numbers, symbols, etc)
+        return true;
     }
     
     // ==================== Context Menu Handlers (Phase 5 Task 16) ====================
@@ -2885,12 +3233,23 @@ public sealed partial class MainWindow : Page
     // Python SDK Named Pipe Server
     private void ToggleFunctionsPanel_Click(object sender, RoutedEventArgs e)
     {
-        _functionsVisible = !_functionsVisible;
-        
-        if (_functionsVisible)
+        SetFunctionsPanelVisibility(!_functionsVisible, ViewModel.Settings.FunctionsPanelWidth);
+    }
+    
+    private void ToggleInspectorPanel_Click(object sender, RoutedEventArgs e)
+    {
+        SetInspectorPanelVisibility(!_inspectorVisible, ViewModel.Settings.InspectorPanelWidth);
+    }
+
+    private void SetFunctionsPanelVisibility(bool visible, double preferredWidth)
+    {
+        _functionsVisible = visible;
+
+        if (visible)
         {
-            // Show panel
-            FunctionsColumn.Width = new GridLength(Math.Max(180, ViewModel.Settings.FunctionsPanelWidth));
+            double targetWidth = preferredWidth > 0 ? preferredWidth : ViewModel.Settings.FunctionsPanelWidth;
+            targetWidth = Math.Max(180, targetWidth);
+            FunctionsColumn.Width = new GridLength(targetWidth);
             FunctionsPanel.Visibility = Visibility.Visible;
             ToggleFunctionsButton.Content = "◀";
             ToggleFunctionsButton.SetValue(ToolTipService.ToolTipProperty, "Hide Functions Panel");
@@ -2898,7 +3257,6 @@ public sealed partial class MainWindow : Page
         }
         else
         {
-            // Hide panel
             FunctionsColumn.Width = new GridLength(0);
             FunctionsPanel.Visibility = Visibility.Collapsed;
             ToggleFunctionsButton.Content = "▶";
@@ -2906,15 +3264,16 @@ public sealed partial class MainWindow : Page
             ShowFunctionsButton.Visibility = Visibility.Visible;
         }
     }
-    
-    private void ToggleInspectorPanel_Click(object sender, RoutedEventArgs e)
+
+    private void SetInspectorPanelVisibility(bool visible, double preferredWidth)
     {
-        _inspectorVisible = !_inspectorVisible;
-        
-        if (_inspectorVisible)
+        _inspectorVisible = visible;
+
+        if (visible)
         {
-            // Show panel
-            InspectorColumn.Width = new GridLength(Math.Max(220, ViewModel.Settings.InspectorPanelWidth));
+            double targetWidth = preferredWidth > 0 ? preferredWidth : ViewModel.Settings.InspectorPanelWidth;
+            targetWidth = Math.Max(220, targetWidth);
+            InspectorColumn.Width = new GridLength(targetWidth);
             InspectorPanel.Visibility = Visibility.Visible;
             ToggleInspectorButton.Content = "▶";
             ToggleInspectorButton.SetValue(ToolTipService.ToolTipProperty, "Hide Inspector Panel");
@@ -2922,7 +3281,6 @@ public sealed partial class MainWindow : Page
         }
         else
         {
-            // Hide panel
             InspectorColumn.Width = new GridLength(0);
             InspectorPanel.Visibility = Visibility.Collapsed;
             ToggleInspectorButton.Content = "◀";
@@ -3006,28 +3364,15 @@ public sealed partial class MainWindow : Page
         {
             var prefs = App.PreferencesService.LoadPreferences();
             
-            // Apply panel widths
-            if (prefs.FunctionsPanelWidth > 0)
-            {
-                FunctionsColumn.Width = new GridLength(prefs.FunctionsPanelWidth);
-            }
-            if (prefs.InspectorPanelWidth > 0)
-            {
-                InspectorColumn.Width = new GridLength(prefs.InspectorPanelWidth);
-            }
-            
-            // Apply panel visibility
-            _functionsVisible = prefs.FunctionsPanelVisible;
-            _inspectorVisible = prefs.InspectorPanelVisible;
-            
-            if (!_functionsVisible)
-            {
-                FunctionsColumn.Width = new GridLength(0);
-            }
-            if (!_inspectorVisible)
-            {
-                InspectorColumn.Width = new GridLength(0);
-            }
+            // Ensure panels start expanded with preferred widths
+            double functionsWidth = prefs.FunctionsPanelWidth > 0 ? prefs.FunctionsPanelWidth : ViewModel.Settings.FunctionsPanelWidth;
+            double inspectorWidth = prefs.InspectorPanelWidth > 0 ? prefs.InspectorPanelWidth : ViewModel.Settings.InspectorPanelWidth;
+
+            ViewModel.Settings.FunctionsPanelWidth = functionsWidth;
+            ViewModel.Settings.InspectorPanelWidth = inspectorWidth;
+
+            SetFunctionsPanelVisibility(true, functionsWidth);
+            SetInspectorPanelVisibility(true, inspectorWidth);
         }
         catch (Exception ex)
         {

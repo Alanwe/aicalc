@@ -22,7 +22,7 @@
             <MenuFlyoutSeparator/>
             <MenuFlyoutSubItem Text="➕ Insert">
                 <MenuFlyoutItem Text="↑ Row Above" Click="InsertRowAbove_Click" />
-                <MenuFlyoutItem Text="↓ Row Below" Click="InsertRowBelow_Click" />
+                 <MenuFlyoutItem Text="↓ Row Below" Click="InsertRowBelow_Click" />
                 <MenuFlyoutItem Text="← Column Left" Click="InsertColumnLeft_Click" />
                 <MenuFlyoutItem Text="→ Column Right" Click="InsertColumnRight_Click" />
             </MenuFlyoutSubItem>
@@ -128,7 +128,7 @@
                                 ToolTipService.ToolTip="Hide Functions Panel" />
                     </Grid>
                     <ScrollViewer MaxHeight="600" VerticalScrollBarVisibility="Auto">
-                        <StackPanel x:Name="FunctionsList" Spacing="8"/>
+                        <StackPanel x:Name="FunctionsList" Spacing="2"/>
                     </ScrollViewer>
                 </StackPanel>
             </Border>
@@ -170,11 +170,42 @@
                     </Grid.RowDefinitions>
                     
                     <!-- Sheet Tabs -->
-                    <TabView x:Name="SheetTabs" 
-                             Grid.Row="0"
-                             TabWidthMode="Equal"
-                             SelectionChanged="SheetTabs_SelectionChanged"
-                             AddTabButtonClick="AddTab_Click"/>
+                          <TabView x:Name="SheetTabs"
+                                      Grid.Row="0"
+                                      TabWidthMode="Equal"
+                                      SelectionChanged="SheetTabs_SelectionChanged"
+                                      TabCloseRequested="SheetTabs_TabCloseRequested"
+                                      Foreground="{ThemeResource TextPrimaryBrush}"
+                                      IsAddTabButtonVisible="False">
+                        <TabView.Resources>
+                            <!-- Implicit Button style applied to TabView add/close buttons to use theme text color -->
+                            <Style TargetType="Button">
+                                <Setter Property="Foreground" Value="{ThemeResource TextPrimaryBrush}" />
+                                <Setter Property="Background" Value="Transparent" />
+                                <Setter Property="BorderBrush" Value="Transparent" />
+                            </Style>
+                            <Style TargetType="SymbolIcon">
+                                <Setter Property="Foreground" Value="{ThemeResource TextPrimaryBrush}" />
+                            </Style>
+                            <Style TargetType="FontIcon">
+                                <Setter Property="Foreground" Value="{ThemeResource TextPrimaryBrush}" />
+                            </Style>
+                        </TabView.Resources>
+
+                        <!-- Rely on implicit Button style above for icons -->
+                        <TabView.TabStripFooter>
+                            <Button Click="NewSheetButton_Click"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Padding="4"
+                                    Margin="6,0,0,0"
+                                    ToolTipService.ToolTip="Add new sheet">
+                                <SymbolIcon Symbol="Add"
+                                            Foreground="{ThemeResource TextPrimaryBrush}"
+                                            VerticalAlignment="Center" />
+                            </Button>
+                        </TabView.TabStripFooter>
+                    </TabView>
                     
                     <!-- Spreadsheet Grid -->
                     <ScrollViewer x:Name="SpreadsheetScrollViewer" Grid.Row="1" 
@@ -267,6 +298,11 @@
                                        Foreground="{ThemeResource AccentBrush}" 
                                        FontSize="16" 
                                        FontWeight="SemiBold" />
+                            <TextBlock x:Name="CellClassTypeLabel"
+                                       Foreground="{ThemeResource TextSecondaryBrush}"
+                                       FontSize="13"
+                                       FontWeight="Normal"
+                                       Margin="0,0,0,4" />
                             
                             <StackPanel Spacing="6">
                                 <TextBlock Text="Value" Foreground="{ThemeResource TextPrimaryBrush}" FontSize="13" FontWeight="SemiBold" />

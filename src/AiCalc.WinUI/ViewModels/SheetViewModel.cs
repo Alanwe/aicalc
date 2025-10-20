@@ -32,7 +32,13 @@ public class SheetViewModel
 
     public WorkbookViewModel Workbook { get; }
 
-    public string Name { get; }
+    public string Name { get; private set; }
+
+    public void Rename(string newName)
+    {
+        if (string.IsNullOrWhiteSpace(newName)) return;
+        Name = newName;
+    }
 
     public ObservableCollection<RowViewModel> Rows { get; }
 

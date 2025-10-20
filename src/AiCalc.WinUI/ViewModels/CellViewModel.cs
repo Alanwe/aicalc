@@ -300,13 +300,28 @@ public partial class CellViewModel : ObservableObject
                 return;
             }
 
-            var objectType = Value.ObjectType == CellObjectType.Empty && !string.IsNullOrWhiteSpace(incoming)
-                ? CellObjectType.Text
-                : Value.ObjectType;
+            string processed = incoming;
+            CellObjectType objectType = Value.ObjectType;
 
-            var display = string.IsNullOrWhiteSpace(Value.DisplayValue) ? incoming : Value.DisplayValue;
+            // If starts with ', treat as string and remove '
+            if (processed.StartsWith("'"))
+            {
+                processed = processed.Substring(1);
+                objectType = CellObjectType.Text;
+            }
+            else if (double.TryParse(processed, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out _))
+            {
+                // If it's a valid number, classify as Number
+                objectType = CellObjectType.Number;
+            }
+            else
+            {
+                objectType = CellObjectType.Text;
+            }
+
+            var display = processed;
             var oldValue = Value;
-            var newValue = new CellValue(objectType, incoming, display);
+            var newValue = new CellValue(objectType, processed, display);
 
             AppendHistory(oldValue, newValue, Formula, Formula, "Value edited");
 

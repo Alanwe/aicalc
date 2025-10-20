@@ -96,60 +96,29 @@ public partial class App : Application
                 _window.Content = new MainWindow();
                 MainWindow = _window;
                 
-                // Set window size - restore saved size or use sensible defaults
+                // Always size to 80% of the primary screen and center it
                 var appWindow = _window.AppWindow;
-                if (prefs.WindowWidth > 0 && prefs.WindowHeight > 0)
+                var displayArea = Microsoft.UI.Windowing.DisplayArea.GetFromWindowId(appWindow.Id, Microsoft.UI.Windowing.DisplayAreaFallback.Primary);
+                if (displayArea != null)
                 {
-                    appWindow.Resize(new Windows.Graphics.SizeInt32((int)prefs.WindowWidth, (int)prefs.WindowHeight));
+                    var workArea = displayArea.WorkArea;
+
+                    int targetWidth = (int)Math.Round(workArea.Width * 0.8);
+                    int targetHeight = (int)Math.Round(workArea.Height * 0.8);
+
+                    targetWidth = Math.Max(targetWidth, 800);
+                    targetHeight = Math.Max(targetHeight, 600);
+
+                    int x = workArea.X + (workArea.Width - targetWidth) / 2;
+                    int y = workArea.Y + (workArea.Height - targetHeight) / 2;
+
+                    var centeringRect = new Windows.Graphics.RectInt32(x, y, targetWidth, targetHeight);
+                    appWindow.MoveAndResize(centeringRect);
                 }
                 else
                 {
-                    // Set initial size to fit within screen with safe margins
-                    var displayArea = Microsoft.UI.Windowing.DisplayArea.Primary;
-                    if (displayArea != null)
-                    {
-                        var workArea = displayArea.WorkArea;
-                        // Use 70% of work area with smaller max size to ensure it fits
-                        int targetWidth = Math.Min(1200, (int)(workArea.Width * 0.7));
-                        int targetHeight = Math.Min(750, (int)(workArea.Height * 0.7));
-
-                        const int topMargin = 40;
-                        const int bottomMargin = 40;
-                        int maxHeight = workArea.Height - topMargin - bottomMargin;
-                        if (maxHeight <= 0)
-                        {
-                            maxHeight = workArea.Height;
-                        }
-
-                        if (targetHeight > maxHeight)
-                        {
-                            targetHeight = maxHeight;
-                        }
-
-                        appWindow.Resize(new Windows.Graphics.SizeInt32(targetWidth, targetHeight));
-
-                        int x = workArea.X + (workArea.Width - targetWidth) / 2;
-                        int availableForPosition = Math.Max(workArea.Height - targetHeight - topMargin - bottomMargin, 0);
-                        int y = workArea.Y + topMargin + availableForPosition / 2;
-
-                        // Ensure window fits within work area vertically
-                        int maxY = workArea.Y + workArea.Height - targetHeight - bottomMargin;
-                        if (y > maxY)
-                        {
-                            y = Math.Max(workArea.Y + topMargin, maxY);
-                        }
-                        if (y < workArea.Y)
-                        {
-                            y = workArea.Y;
-                        }
-
-                        appWindow.Move(new Windows.Graphics.PointInt32(x, y));
-                    }
-                    else
-                    {
-                        // Fallback to smaller default that fits most screens
-                        appWindow.Resize(new Windows.Graphics.SizeInt32(1200, 750));
-                    }
+                    var fallbackRect = new Windows.Graphics.RectInt32(0, 0, 1400, 900);
+                    appWindow.MoveAndResize(fallbackRect);
                 }
                 
                 // Handle window closing to save preferences
