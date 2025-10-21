@@ -15,11 +15,15 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
   </ItemGroup>
 
-  <ItemGroup>
+    <ItemGroup>
     <!-- Link to source files for testing (non-UI components) -->
-    <Compile Include="../../src/AiCalc.WinUI/Models/*.cs" Link="Models/%(Filename)%(Extension)" Exclude="../../src/AiCalc.WinUI/Models/FunctionSuggestion.cs" />
+  <Compile Include="../../src/AiCalc.WinUI/Models/*.cs" Link="Models/%(Filename)%(Extension)" Exclude="../../src/AiCalc.WinUI/Models/FunctionSuggestion.cs;../../src/AiCalc.WinUI/Models/CellAddress.cs" />
     <Compile Include="../../src/AiCalc.WinUI/Models/CellObjects/*.cs" Link="Models/CellObjects/%(Filename)%(Extension)" />
     <Compile Include="../../src/AiCalc.WinUI/Services/DependencyGraph.cs" Link="Services/DependencyGraph.cs" />
+    <Compile Include="../../src/AiCalc.WinUI/Services/FormulaParser.cs" Link="Services/FormulaParser.cs" />
+  <Compile Include="../../src/AiCalc.WinUI/Services/FormulaValidation.cs" Link="Services/FormulaValidation.cs" />
+  <Compile Include="TestDoubles/FunctionDescriptor.cs" Link="TestDoubles/FunctionDescriptor.cs" />
+  <Compile Include="../../src/AiCalc.WinUI/Models/CellAddress.cs" Link="Models/CellAddress.cs" />
   </ItemGroup>
 
 </Project>

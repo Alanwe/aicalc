@@ -227,7 +227,53 @@
                                      IsSpellCheckEnabled="False"
                                      GotFocus="CellEditBox_GotFocus"
                                      LostFocus="CellEditBox_LostFocus"
-                                     KeyDown="CellEditBox_KeyDown">
+                                     KeyDown="CellEditBox_KeyDown"
+                                     TextChanged="CellEditBox_TextChanged">
+                                <TextBox.Resources>
+                                     <Flyout x:Name="FunctionAutocompleteFlyout" 
+                                         Placement="Bottom"
+                                         AllowFocusOnInteraction="False"
+                                         AllowFocusWhenDisabled="False"
+                                         Opened="FunctionAutocompleteFlyout_Opened"
+                                         Closed="FunctionAutocompleteFlyout_Closed">
+                                        <Border Background="White"
+                                                BorderBrush="#FF0078D4"
+                                                BorderThickness="2"
+                                                CornerRadius="6"
+                                                Padding="4"
+                                                MaxHeight="400"
+                                                MinWidth="350"
+                                                MaxWidth="450">
+                                            <ListView x:Name="FlyoutFunctionList"
+                                                      SelectionMode="Single"
+                                                      ItemClick="FunctionAutocomplete_ItemClick"
+                                                      IsItemClickEnabled="True"
+                                                      IsHitTestVisible="True"
+                                                      Background="White"
+                                                      ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                                      PointerPressed="FlyoutFunctionList_PointerPressed"
+                                                      PointerWheelChanged="FlyoutFunctionList_PointerWheelChanged"
+                                                      IsTabStop="False">
+                                                <ListView.ItemTemplate>
+                                                    <DataTemplate x:DataType="models:FunctionSuggestion">
+                                                        <StackPanel Spacing="2" Padding="6,4">
+                                                            <TextBlock Text="{Binding Name}" 
+                                                                       FontWeight="SemiBold"
+                                                                       FontSize="13"
+                                                                       Foreground="Black"/>
+                                                            <TextBlock Text="{Binding Description}" 
+                                                                       FontSize="11"
+                                                                       Foreground="#FF666666"
+                                                                       TextWrapping="Wrap"
+                                                                       MaxWidth="400"/>
+                                                        </StackPanel>
+                                                    </DataTemplate>
+                                                </ListView.ItemTemplate>
+                                            </ListView>
+                                        </Border>
+                                    </Flyout>
+                                </TextBox.Resources>
                                 <TextBox.Template>
                                     <ControlTemplate TargetType="TextBox">
                                         <Border Background="{TemplateBinding Background}"
@@ -334,13 +380,15 @@
                                     <!-- Function Autocomplete Popup -->
                                     <Popup x:Name="FunctionAutocompletePopup"
                                            IsLightDismissEnabled="True"
-                                           IsOpen="False">
+                                           IsOpen="False"
+                                           ShouldConstrainToRootBounds="False">
                                         <Border Background="{ThemeResource LayerFillColorDefaultBrush}"
                                                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                                 BorderThickness="1"
                                                 CornerRadius="4"
                                                 Padding="4"
-                                                MaxHeight="200">
+                                                MaxHeight="300"
+                                                MinWidth="280">
                                             <ListView x:Name="FunctionAutocompleteList"
                                                       SelectionMode="Single"
                                                       ItemClick="FunctionAutocomplete_ItemClick"
@@ -420,6 +468,27 @@
                                     </Popup>
                                 </Grid>
                             </StackPanel>
+                            
+                            <!-- TEST: Visible function list -->
+                            <Border x:Name="VisibleFunctionList"
+                                    Background="{ThemeResource CardBackgroundBrush}"
+                                    BorderBrush="{ThemeResource BorderBrushColor}"
+                                    BorderThickness="1"
+                                    CornerRadius="4"
+                                    Padding="4"
+                                    MaxHeight="200"
+                                    Visibility="Collapsed">
+                                <ListView x:Name="TestFunctionList"
+                                          SelectionMode="Single"
+                                          ItemClick="FunctionAutocomplete_ItemClick"
+                                          IsItemClickEnabled="True">
+                                    <ListView.ItemTemplate>
+                                        <DataTemplate x:DataType="models:FunctionSuggestion">
+                                            <TextBlock Text="{Binding Name}" Padding="4"/>
+                                        </DataTemplate>
+                                    </ListView.ItemTemplate>
+                                </ListView>
+                            </Border>
                             
                             <StackPanel Spacing="6">
                                 <TextBlock Text="Automation" Foreground="{ThemeResource TextPrimaryBrush}" FontSize="13" FontWeight="SemiBold" />

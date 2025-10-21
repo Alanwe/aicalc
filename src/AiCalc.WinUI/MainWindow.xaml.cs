@@ -30,8 +30,11 @@ public sealed partial class MainWindow : Page
     private readonly Dictionary<string, FunctionDescriptor> _functionMap = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<ParameterHintItem> _parameterHints = new();
     private bool _isFormulaEditing;
+    private bool _processingTextChange; // Prevent re-entry when we modify the text
+    private bool _updatingFormulaText; // Prevent re-entry in CellFormula_Changed
     private CellViewModel? _formulaEditTargetCell;
     private readonly List<(CellViewModel Cell, CellVisualState PreviousState)> _formulaHighlights = new();
+    private readonly HashSet<CellViewModel> _validationErrorCells = new();
     private readonly List<CellViewModel> _multiSelection = new();
     private readonly Dictionary<CellObjectType, StackPanel> _functionGroups = new();
     private readonly Dictionary<CellObjectType, Button> _functionHeaders = new();
@@ -57,6 +60,7 @@ public sealed partial class MainWindow : Page
     private bool _functionsVisible = true;
     private bool _inspectorVisible = true;
     private bool _isNavigatingBetweenCells = false;
+    private bool _isPickingFormulaReference;
     private int? _columnContextIndex;
     private int? _rowContextIndex;
     // Reduced default row height further (20% reduction from 32)
@@ -122,7 +126,11 @@ public sealed partial class MainWindow : Page
         FunctionsList.Children.Clear();
         _functionGroups.Clear();
 
+        var totalFunctions = ViewModel.FunctionRegistry.Functions.Count();
         var available = GetAvailableFunctions().ToList();
+        
+        System.Diagnostics.Debug.WriteLine($"LoadFunctionsList: Total registered={totalFunctions}, Available after filter={available.Count}");
+        
         foreach (var type in _functionGroupOrder)
         {
             var funcs = available.Where(f => f.CanAccept(type)).OrderBy(f => f.Name).ToList();
@@ -323,24 +331,31 @@ public sealed partial class MainWindow : Page
         var connection = App.AIServices.GetDefaultConnection();
         var currentCellType = _formulaEditTargetCell?.Value.ObjectType ?? _selectedCell?.Value.ObjectType ?? CellObjectType.Text;
         currentCellType = NormalizeCellObjectType(currentCellType);
+        var isBrowsing = string.IsNullOrWhiteSpace(searchText);
 
         foreach (var descriptor in ViewModel.FunctionRegistry.Functions)
         {
+            // Check if function name matches search
             if (!descriptor.Name.StartsWith(searchText, StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
 
-            if (descriptor.Category == FunctionCategory.AI)
+            // Show ALL functions when browsing (empty search after typing =)
+            // Only apply filters when user is actively searching
+            if (!isBrowsing)
             {
-                if (!IsFunctionSupportedByConnection(descriptor, connection))
+                if (descriptor.Category == FunctionCategory.AI)
                 {
-                    continue;
-                }
+                    if (!IsFunctionSupportedByConnection(descriptor, connection))
+                    {
+                        continue;
+                    }
 
-                if (!IsFunctionRelevantForCellType(descriptor, currentCellType))
-                {
-                    continue;
+                    if (!IsFunctionRelevantForCellType(descriptor, currentCellType))
+                    {
+                        continue;
+                    }
                 }
             }
 
@@ -725,6 +740,7 @@ public sealed partial class MainWindow : Page
         ApplyCellStyling(button, cellVm, valueText);
         button.Click += (s, e) => SelectCell(cellVm, button);
         button.DoubleTapped += (s, e) => StartDirectEdit(cellVm, button);
+    button.PointerPressed += CellButton_PointerPressed;
         
         // Attach context menu (Phase 5 Task 16)
         button.ContextFlyout = Resources["CellContextMenu"] as MenuFlyout;
@@ -994,7 +1010,7 @@ public sealed partial class MainWindow : Page
 
     private void SelectCell(CellViewModel cell, Button button)
     {
-        if (_isFormulaEditing && _formulaEditTargetCell != null && cell != _formulaEditTargetCell)
+        if (_isFormulaEditing && _isPickingFormulaReference && _formulaEditTargetCell != null && cell != _formulaEditTargetCell)
         {
             InsertCellReferenceIntoFormula(cell);
             return;
@@ -1595,6 +1611,7 @@ public sealed partial class MainWindow : Page
 
     private void StartDirectEdit(CellViewModel cell, Button button, string? initialCharacter = null)
     {
+        _isPickingFormulaReference = false;
         // Only allow direct edit for text/empty cells (not images, directories, etc.)
         if (cell.Value.ObjectType != CellObjectType.Text && 
             cell.Value.ObjectType != CellObjectType.Number &&
@@ -1639,14 +1656,79 @@ public sealed partial class MainWindow : Page
         // If an initial character was provided, replace the content with it
         if (!string.IsNullOrEmpty(initialCharacter))
         {
-            CellEditBox.Text = initialCharacter;
-            CellEditBox.Focus(FocusState.Programmatic);
-            // Use dispatcher to ensure selection is cleared after focus events complete
-            DispatcherQueue.TryEnqueue(() =>
+            // If editing started with =, switch to formula editing mode and populate the Formula box
+            if (initialCharacter.StartsWith("="))
             {
-                CellEditBox.SelectionStart = CellEditBox.Text.Length;
-                CellEditBox.SelectionLength = 0;
-            });
+                System.Diagnostics.Debug.WriteLine($"StartDirectEdit: Entering formula mode with text '{initialCharacter}'");
+                
+                // VISIBLE DEBUG: Show message box
+                SelectionInfoText.Text = "DEBUG: StartDirectEdit received formula - entering formula mode";
+                
+                // Show formula editor in inspector - preserve what user typed
+                CellEditBox.Text = initialCharacter;
+                CellEditBox.Focus(FocusState.Programmatic);
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    CellEditBox.SelectionStart = CellEditBox.Text.Length;
+                    CellEditBox.SelectionLength = 0;
+                });
+
+                // Start focused formula editing via inspector control
+                _isFormulaEditing = true;
+                _formulaEditTargetCell = cell;
+                
+                // Ensure inspector panel is visible for formula editing
+                if (!_inspectorVisible)
+                {
+                    System.Diagnostics.Debug.WriteLine("StartDirectEdit: Inspector was hidden, showing it now");
+                    SelectionInfoText.Text = "DEBUG: Opening inspector panel...";
+                    _inspectorVisible = true;
+                    SetInspectorPanelVisibility(true, ViewModel.Settings.InspectorPanelWidth);
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine("StartDirectEdit: Inspector already visible");
+                    SelectionInfoText.Text = "DEBUG: Inspector already visible, setting formula...";
+                }
+                
+                // Wait for panel to be visible
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    _updatingFormulaText = true;
+                    try
+                    {
+                        // Mirror into the inspector formula box so user sees advanced UI
+                        if (CellFormulaBox.Text != CellEditBox.Text)
+                        {
+                            CellFormulaBox.Text = CellEditBox.Text;
+                        }
+                    }
+                    finally
+                    {
+                        _updatingFormulaText = false;
+                    }
+                    
+                    // Keep CellEditBox VISIBLE and FOCUSED for typing
+                    CellEditBox.Focus(FocusState.Keyboard);
+                    CellEditBox.SelectionStart = CellEditBox.Text.Length;
+                    _isPickingFormulaReference = false;
+                    
+                    // Show intellisense immediately
+                    ShowFormulaIntellisense();
+                    UpdateParameterHints();
+                });
+            }
+            else
+            {
+                CellEditBox.Text = initialCharacter;
+                CellEditBox.Focus(FocusState.Programmatic);
+                // Use dispatcher to ensure selection is cleared after focus events complete
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    CellEditBox.SelectionStart = CellEditBox.Text.Length;
+                    CellEditBox.SelectionLength = 0;
+                });
+            }
         }
         else
         {
@@ -1658,11 +1740,41 @@ public sealed partial class MainWindow : Page
 
     private void CellEditBox_LostFocus(object sender, RoutedEventArgs e)
     {
+        // Don't commit if flyout is open - user is still editing the formula
+        if (FunctionAutocompleteFlyout.IsOpen || _suppressCommitOnFlyoutOpen)
+        {
+            System.Diagnostics.Debug.WriteLine("CellEditBox_LostFocus: Flyout is open, not committing");
+            return;
+        }
+        
         // Don't commit if we're navigating between cells (Tab key)
         if (!_isNavigatingBetweenCells)
         {
             CommitCellEdit();
         }
+    }
+
+    private bool _suppressCommitOnFlyoutOpen;
+
+    private void FunctionAutocompleteFlyout_Opened(object sender, object e)
+    {
+        // Prevent commit while flyout is opening
+        _suppressCommitOnFlyoutOpen = true;
+        // Refocus the edit box after a short delay so keystrokes go to it
+        DispatcherQueue?.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+        {
+            CellEditBox.Focus(FocusState.Keyboard);
+            _suppressCommitOnFlyoutOpen = false;
+        });
+    }
+
+    private void FunctionAutocompleteFlyout_Closed(object sender, object e)
+    {
+        // Ensure focus returns to the edit box when the flyout closes
+        DispatcherQueue?.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+        {
+            CellEditBox.Focus(FocusState.Keyboard);
+        });
     }
 
     private void CellEditBox_GotFocus(object sender, RoutedEventArgs e)
@@ -1675,6 +1787,127 @@ public sealed partial class MainWindow : Page
 
     private void CellEditBox_KeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
     {
+        // If flyout is open and user presses Up/Down arrows, navigate the list
+        if (_isFormulaEditing && FunctionAutocompleteFlyout.IsOpen)
+        {
+            if (e.Key == Windows.System.VirtualKey.Down)
+            {
+                // Move selection down in the flyout list
+                if (FlyoutFunctionList.SelectedIndex < FlyoutFunctionList.Items.Count - 1)
+                {
+                    FlyoutFunctionList.SelectedIndex++;
+                    FlyoutFunctionList.ScrollIntoView(FlyoutFunctionList.SelectedItem);
+                }
+                e.Handled = true;
+                return;
+            }
+            else if (e.Key == Windows.System.VirtualKey.Up)
+            {
+                // Move selection up in the flyout list
+                if (FlyoutFunctionList.SelectedIndex > 0)
+                {
+                    FlyoutFunctionList.SelectedIndex--;
+                    FlyoutFunctionList.ScrollIntoView(FlyoutFunctionList.SelectedItem);
+                }
+                e.Handled = true;
+                return;
+            }
+            else if (e.Key == Windows.System.VirtualKey.Enter || e.Key == Windows.System.VirtualKey.Tab)
+            {
+                // If there's exactly one suggestion, insert it
+                if (FlyoutFunctionList.Items?.Count == 1 && FlyoutFunctionList.Items[0] is FunctionSuggestion only)
+                {
+                    InsertFunctionSuggestion(only);
+                }
+                else if (FlyoutFunctionList.SelectedItem is FunctionSuggestion suggestion)
+                {
+                    InsertFunctionSuggestion(suggestion);
+                }
+                e.Handled = true;
+                return;
+            }
+            else if (e.Key == Windows.System.VirtualKey.Escape)
+            {
+                // Close the flyout
+                FunctionAutocompleteFlyout.Hide();
+                e.Handled = true;
+                return;
+            }
+        }
+        // Detect if user types = to start formula mode
+        if (e.Key == (Windows.System.VirtualKey)187 && !_isFormulaEditing) // VK 187 is = key
+        {
+            var textBox = sender as TextBox;
+            if (textBox != null && string.IsNullOrEmpty(textBox.Text))
+            {
+                // User typed = in empty cell - switch to formula mode
+                var cell = textBox.Tag as CellViewModel;
+                var button = _selectedButton;
+                if (cell != null && button != null)
+                {
+                    // CRITICAL: Mark event as handled BEFORE calling StartDirectEdit
+                    // to prevent = from being inserted twice
+                    e.Handled = true;
+                    
+                    // Clear any pending text
+                    textBox.Text = "";
+                    
+                    // Use dispatcher to ensure key event is fully processed
+                    DispatcherQueue?.TryEnqueue(() =>
+                    {
+                        StartDirectEdit(cell, button, "=");
+                    });
+                    return;
+                }
+            }
+        }
+        
+        if (_isFormulaEditing)
+
+        {
+            // Forward keys to the formula box while formula editing
+            // Allow Enter to commit the formula UNLESS flyout is open (then it selects from flyout)
+            if (e.Key == Windows.System.VirtualKey.Enter && !FunctionAutocompleteFlyout.IsOpen)
+            {
+                CommitCellEdit();
+                e.Handled = true;
+                return;
+            }
+
+            // Tab navigation should still work
+            if (e.Key == Windows.System.VirtualKey.Tab)
+            {
+                _isNavigatingBetweenCells = true;
+                CommitCellEdit();
+                var shift = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(Windows.System.VirtualKey.Shift).HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
+                var newCell = MoveSelection(shift ? -1 : 1, 0);
+                CellEditBox.Visibility = Visibility.Collapsed;
+                CellEditBox.Tag = null;
+                if (newCell != null)
+                {
+                    var newButton = GetButtonForCell(newCell);
+                    if (newButton != null)
+                    {
+                        DispatcherQueue.TryEnqueue(() => StartDirectEdit(newCell, newButton));
+                    }
+                    else
+                    {
+                        DispatcherQueue.TryEnqueue(() => _isNavigatingBetweenCells = false);
+
+                    }
+                }
+                else
+                {
+                    DispatcherQueue.TryEnqueue(() => _isNavigatingBetweenCells = false);
+                }
+                e.Handled = true;
+                return;
+            }
+
+            // Other keys should be typed into the formula box, so let it handle the input
+            return;
+        }
+
         if (e.Key == Windows.System.VirtualKey.Enter)
         {
             CommitCellEdit();
@@ -1723,6 +1956,80 @@ public sealed partial class MainWindow : Page
         {
             CellEditBox.Visibility = Visibility.Collapsed;
             e.Handled = true;
+        }
+    }
+
+    private void FlyoutFunctionList_PointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        // Prevent the pointer event from stealing focus; select the item under the pointer
+        var pt = e.GetCurrentPoint(FlyoutFunctionList).Position;
+        var element = FlyoutFunctionList.ContainerFromIndex(0) as FrameworkElement;
+        // Let ListView handle selection via ItemClick, but keep focus in edit box
+        CellEditBox.Focus(FocusState.Keyboard);
+        e.Handled = false;
+    }
+
+    private void FlyoutFunctionList_PointerWheelChanged(object sender, PointerRoutedEventArgs e)
+    {
+        // Allow mouse wheel to scroll the list without taking focus
+        // Do nothing special; ensure edit box keeps focus
+        CellEditBox.Focus(FocusState.Keyboard);
+    }
+
+    private void CellEditBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        // Prevent re-entry when we're modifying the text programmatically
+        if (_processingTextChange) return;
+        
+        var textBox = sender as TextBox;
+        if (textBox == null) return;
+
+        System.Diagnostics.Debug.WriteLine($"CellEditBox_TextChanged: text='{textBox.Text}', _isFormulaEditing={_isFormulaEditing}, _processingTextChange={_processingTextChange}");
+
+        // If in formula mode, update intellisense as user types
+        if (_isFormulaEditing && textBox.Text.StartsWith("="))
+        {
+            System.Diagnostics.Debug.WriteLine("CellEditBox_TextChanged: In formula mode, updating intellisense");
+            
+            // Mirror to inspector formula box only if different
+            _updatingFormulaText = true;
+            try
+            {
+                if (CellFormulaBox.Text != textBox.Text)
+                {
+                    CellFormulaBox.Text = textBox.Text;
+                }
+            }
+            finally
+            {
+                _updatingFormulaText = false;
+            }
+            
+            // Update autocomplete suggestions
+            ShowFormulaIntellisense();
+            UpdateParameterHints();
+            // Ensure edit box keeps focus after updating suggestions
+            DispatcherQueue?.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+            {
+                CellEditBox.Focus(FocusState.Keyboard);
+            });
+            return;
+        }
+
+        // Check if user just typed "=" to start a formula
+        if (!string.IsNullOrEmpty(textBox.Text) && textBox.Text.StartsWith("=") && !_isFormulaEditing)
+        {
+            var cell = textBox.Tag as CellViewModel;
+            var button = _selectedButton;
+            
+            if (cell != null && button != null)
+            {
+                System.Diagnostics.Debug.WriteLine("DEBUG: TextChanged detected '=' - switching to formula mode");
+                
+                // DON'T set _processingTextChange - we want subsequent keystrokes to trigger filtering
+                // Just call StartDirectEdit
+                StartDirectEdit(cell, button, textBox.Text);
+            }
         }
     }
 
@@ -1956,15 +2263,27 @@ public sealed partial class MainWindow : Page
 
     private void CellFormula_Changed(object sender, TextChangedEventArgs e)
     {
+        // Prevent infinite loop
+        if (_updatingFormulaText) return;
+        
+        // Always show intellisense when formula editing, even if _isUpdatingCell
+        if (_isFormulaEditing)
+        {
+            ShowFormulaIntellisense();
+            UpdateParameterHints();
+            UpdateFormulaSyntaxInfo();
+        }
+        
         if (_isUpdatingCell || _selectedCell == null) return;
         _selectedCell.Formula = CellFormulaBox.Text;
         
-        // Show intellisense if typing function name
-        ShowFormulaIntellisense();
-        UpdateParameterHints();
-        
-        // Update syntax highlighting info (Phase 5)
-        UpdateFormulaSyntaxInfo();
+        // Show intellisense if typing function name (redundant but safe)
+        if (!_isFormulaEditing)
+        {
+            ShowFormulaIntellisense();
+            UpdateParameterHints();
+            UpdateFormulaSyntaxInfo();
+        }
     }
 
     private void UpdateFormulaSyntaxInfo()
@@ -1996,13 +2315,17 @@ public sealed partial class MainWindow : Page
 
     private void ShowFormulaIntellisense()
     {
-        var text = CellFormulaBox.Text;
+        // Use CellEditBox text for filtering since that's what user is typing into
+        var text = CellEditBox.Visibility == Visibility.Visible ? CellEditBox.Text : CellFormulaBox.Text;
+        System.Diagnostics.Debug.WriteLine($"ShowFormulaIntellisense: Called with text='{text}', CellEditBox.Visibility={CellEditBox.Visibility}, CellEditBox.Text='{CellEditBox.Text}', CellFormulaBox.Text='{CellFormulaBox.Text}'");
         
-        // Only show intellisense if text starts with = and has at least one character after
-        if (string.IsNullOrWhiteSpace(text) || !text.StartsWith("=") || text.Length < 2)
+        if (string.IsNullOrWhiteSpace(text) || !text.StartsWith("="))
         {
+            System.Diagnostics.Debug.WriteLine("ShowFormulaIntellisense: Text invalid, closing popup");
             FunctionAutocompletePopup.IsOpen = false;
+            FunctionAutocompleteFlyout.Hide();
             ParameterHintPopup.IsOpen = false;
+            VisibleFunctionList.Visibility = Visibility.Collapsed;
             return;
         }
         
@@ -2011,32 +2334,118 @@ public sealed partial class MainWindow : Page
         var parenIndex = formulaText.IndexOf('(');
         if (parenIndex >= 0)
         {
-            // Already has opening paren, don't show suggestions
+            // Already has opening paren, enable reference picking mode
             FunctionAutocompletePopup.IsOpen = false;
+            FunctionAutocompleteFlyout.Hide();
+            _isPickingFormulaReference = true;
             return;
         }
         
+        // Not in reference picking mode while typing function name
+        _isPickingFormulaReference = false;
+        
         // Filter suggestions based on what's been typed and current context
         var searchText = formulaText.ToUpperInvariant();
+        System.Diagnostics.Debug.WriteLine($"ShowFormulaIntellisense: Filtering with searchText='{searchText}' (from formulaText='{formulaText}')");
+        
         var matchingSuggestions = GetContextualSuggestions(searchText)
-            .Take(10)
+            .Take(20)
             .ToList();
+        
+        System.Diagnostics.Debug.WriteLine($"ShowFormulaIntellisense: Found {matchingSuggestions.Count} suggestions for search='{searchText}'");
+        
+        if (matchingSuggestions.Count > 0)
+        {
+            var names = string.Join(", ", matchingSuggestions.Select(s => s.Name).Take(5));
+            System.Diagnostics.Debug.WriteLine($"ShowFormulaIntellisense: First suggestions: {names}");
+        }
+        
+        // Show status message for debugging
+        ViewModel.StatusMessage = $"Formula mode: {matchingSuggestions.Count} functions available";
         
         if (matchingSuggestions.Any())
         {
             FunctionAutocompleteList.ItemsSource = matchingSuggestions;
             FunctionAutocompleteList.SelectedIndex = 0;
             
-            // Position popup below the textbox
-            var transform = CellFormulaBox.TransformToVisual(this);
-            var point = transform.TransformPoint(new Windows.Foundation.Point(0, CellFormulaBox.ActualHeight));
-            FunctionAutocompletePopup.HorizontalOffset = point.X;
-            FunctionAutocompletePopup.VerticalOffset = point.Y;
-            FunctionAutocompletePopup.IsOpen = true;
+            // Update flyout list
+            FlyoutFunctionList.ItemsSource = matchingSuggestions;
+            
+            // ALSO show in visible test list
+            TestFunctionList.ItemsSource = matchingSuggestions;
+            VisibleFunctionList.Visibility = Visibility.Visible;
+            
+            // Keep orange for now to make it obvious it's working
+            VisibleFunctionList.Background = new SolidColorBrush(Microsoft.UI.Colors.Orange);
+            VisibleFunctionList.BorderThickness = new Thickness(3);
+            
+            System.Diagnostics.Debug.WriteLine($"ShowFormulaIntellisense: Set VisibleFunctionList.Visibility = Visible with {matchingSuggestions.Count} items");
+            System.Diagnostics.Debug.WriteLine($"ShowFormulaIntellisense: TestFunctionList.Items.Count = {TestFunctionList.Items?.Count ?? 0}");
+            
+            // Ensure popup has XamlRoot set
+            if (FunctionAutocompletePopup.XamlRoot == null)
+            {
+                FunctionAutocompletePopup.XamlRoot = CellFormulaBox.XamlRoot;
+            }
+            
+            // Try to show the flyout on CellEditBox
+            if (CellEditBox.Visibility == Visibility.Visible)
+            {
+                try
+                {
+                    // Ensure edit box has focus BEFORE showing flyout
+                    CellEditBox.Focus(FocusState.Keyboard);
+                    
+                    FunctionAutocompleteFlyout.ShowAt(CellEditBox);
+                    System.Diagnostics.Debug.WriteLine("ShowFormulaIntellisense: Flyout shown at CellEditBox");
+                    
+                    // Keep focus on CellEditBox immediately
+                    CellEditBox.Focus(FocusState.Keyboard);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"ShowFormulaIntellisense: Error showing flyout: {ex.Message}");
+                }
+            }
+            
+            // Position popup near the CellEditBox (where user is typing)
+            try
+            {
+                // Close first to reset state
+                FunctionAutocompletePopup.IsOpen = false;
+                
+                if (CellEditBox.Visibility == Visibility.Visible)
+                {
+                    // Position below the cell edit box
+                    var transform = CellEditBox.TransformToVisual(null);
+                    var point = transform.TransformPoint(new Windows.Foundation.Point(0, CellEditBox.ActualHeight));
+                    FunctionAutocompletePopup.HorizontalOffset = point.X;
+                    FunctionAutocompletePopup.VerticalOffset = point.Y + 4;
+                }
+                else
+                {
+                    // Fallback to formula box
+                    var transform = CellFormulaBox.TransformToVisual(null);
+                    var point = transform.TransformPoint(new Windows.Foundation.Point(0, CellFormulaBox.ActualHeight));
+                    FunctionAutocompletePopup.HorizontalOffset = point.X;
+                    FunctionAutocompletePopup.VerticalOffset = point.Y + 4;
+                }
+                
+                FunctionAutocompletePopup.IsOpen = true;
+                System.Diagnostics.Debug.WriteLine($"ShowFormulaIntellisense: Showing {matchingSuggestions.Count} suggestions, Popup IsOpen={FunctionAutocompletePopup.IsOpen}");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"ShowFormulaIntellisense: Error opening popup: {ex.Message}");
+            }
         }
         else
         {
+            System.Diagnostics.Debug.WriteLine("ShowFormulaIntellisense: No suggestions, closing all");
             FunctionAutocompletePopup.IsOpen = false;
+            FunctionAutocompleteFlyout.Hide();
+            VisibleFunctionList.Visibility = Visibility.Collapsed;
+            VisibleFunctionList.Visibility = Visibility.Collapsed;
         }
     }
 
@@ -2135,7 +2544,91 @@ public sealed partial class MainWindow : Page
         ParameterHintPopup.HorizontalOffset = point.X;
         ParameterHintPopup.VerticalOffset = point.Y + 4;
         ParameterHintPopup.IsOpen = _parameterHints.Count > 0;
+        // Validate current argument types for immediate feedback
+        ValidateFormulaArguments();
     }
+
+    private void ValidateFormulaArguments()
+    {
+        if (!_isFormulaEditing || _formulaEditTargetCell == null) return;
+
+        var text = CellFormulaBox.Text ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(text) || !text.StartsWith("="))
+        {
+            ClearCellValidationError(_formulaEditTargetCell);
+            return;
+        }
+
+        var caret = CellFormulaBox.SelectionStart;
+        var context = ParseFunctionContext(text, caret);
+        if (string.IsNullOrWhiteSpace(context.FunctionName) || !_functionMap.TryGetValue(context.FunctionName, out var descriptor))
+        {
+            ClearCellValidationError(_formulaEditTargetCell);
+            return;
+        }
+
+        // Basic parse of arguments (strings/numbers/cell refs)
+        var parenPos = text.IndexOf('(');
+        var argsText = parenPos >= 0 ? text.Substring(parenPos + 1) : string.Empty;
+        if (argsText.EndsWith(")"))
+        {
+            argsText = argsText.Substring(0, argsText.Length - 1);
+        }
+        var tokens = AiCalc.Services.FormulaParser.SplitArguments(argsText).Select(t => t.Trim()).ToArray();
+
+        // Use validation helper with a cell type lookup
+        var result = FormulaValidation.ValidateParameters(
+            descriptor,
+            tokens,
+            addr =>
+            {
+                var sheetName = addr.SheetName ?? (_formulaEditTargetCell?.Sheet.Name ?? ViewModel.SelectedSheet?.Name ?? "Sheet1");
+                if (ViewModel.GetSheet(sheetName) is SheetViewModel sheet)
+                {
+                    var cell = sheet.GetCell(addr.Row, addr.Column);
+                    return cell?.Value.ObjectType;
+                }
+                return null;
+            },
+            _formulaEditTargetCell?.Sheet.Name ?? ViewModel.SelectedSheet?.Name ?? "Sheet1");
+
+        if (!result.IsValid)
+        {
+            SetCellValidationError(_formulaEditTargetCell!, result.ErrorMessage ?? "Invalid parameters");
+            return;
+        }
+
+        ClearCellValidationError(_formulaEditTargetCell!);
+    }
+
+    private void SetCellValidationError(CellViewModel cell, string message)
+    {
+        cell.VisualState = CellVisualState.Error;
+        _validationErrorCells.Add(cell);
+        var button = GetButtonForCell(cell);
+        if (button != null)
+        {
+            button.SetValue(ToolTipService.ToolTipProperty, message);
+            ApplyCellStyling(button, cell);
+        }
+    }
+
+    private void ClearCellValidationError(CellViewModel cell)
+    {
+        if (_validationErrorCells.Contains(cell))
+        {
+            cell.VisualState = CellVisualState.Normal;
+            _validationErrorCells.Remove(cell);
+            var button = GetButtonForCell(cell);
+            if (button != null)
+            {
+                button.ClearValue(ToolTipService.ToolTipProperty);
+                ApplyCellStyling(button, cell);
+            }
+        }
+    }
+
+    // Argument splitting logic moved to FormulaParser.SplitArguments
 
     private void CellFormulaBox_KeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
     {
@@ -2194,7 +2687,21 @@ public sealed partial class MainWindow : Page
 
     private void CellFormulaBox_LostFocus(object sender, RoutedEventArgs e)
     {
+        if (_isPickingFormulaReference)
+        {
+            DispatcherQueue?.TryEnqueue(() =>
+            {
+                _isPickingFormulaReference = false;
+                CellFormulaBox.Focus(FocusState.Programmatic);
+            });
+            return;
+        }
+
         _isFormulaEditing = false;
+        if (_formulaEditTargetCell != null && _selectedCell == _formulaEditTargetCell)
+        {
+            _formulaEditTargetCell.Formula = CellFormulaBox.Text;
+        }
         _formulaEditTargetCell = null;
         ParameterHintPopup.IsOpen = false;
         ClearFormulaHighlights();
@@ -2225,6 +2732,13 @@ public sealed partial class MainWindow : Page
         _selectedCell!.Formula = CellFormulaBox.Text;
         HighlightFormulaCell(cell);
         UpdateParameterHints();
+        // Stay in picking mode - user may want to select more cells
+        DispatcherQueue?.TryEnqueue(() => CellFormulaBox.Focus(FocusState.Programmatic));
+    }
+
+    private void CellButton_PointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        // Pointer handler for future use - picking state now managed by formula content
     }
 
     private static string BuildCellReferenceString(CellViewModel cell, CellViewModel target)
@@ -2271,11 +2785,56 @@ public sealed partial class MainWindow : Page
 
     private void InsertFunctionSuggestion(FunctionSuggestion suggestion)
     {
-        // Replace the typed text with the full function name and opening paren
-        CellFormulaBox.Text = $"={suggestion.Name}(";
-        CellFormulaBox.SelectionStart = CellFormulaBox.Text.Length;
+        var newFormula = $"={suggestion.Name}()";
+        
+        // Update both edit boxes and the cell
+        _updatingFormulaText = true;
+        try
+        {
+            CellFormulaBox.Text = newFormula;
+            CellEditBox.Text = newFormula;
+            
+            if (_formulaEditTargetCell != null)
+            {
+                _formulaEditTargetCell.Formula = newFormula;
+                _formulaEditTargetCell.RawValue = newFormula;
+            }
+        }
+        finally
+        {
+            _updatingFormulaText = false;
+        }
+        
+        // Place caret inside parentheses in both boxes
+        var caretPos = newFormula.Length - 1;
+        CellFormulaBox.SelectionStart = caretPos;
+        CellEditBox.SelectionStart = caretPos;
+        
         FunctionAutocompletePopup.IsOpen = false;
-        CellFormulaBox.Focus(FocusState.Programmatic);
+        VisibleFunctionList.Visibility = Visibility.Collapsed;
+        
+        // Keep commit suppressed while we hide the flyout and refocus
+        _suppressCommitOnFlyoutOpen = true;
+        // Hide flyout and return focus to the edit box asynchronously
+        FunctionAutocompleteFlyout.Hide();
+        DispatcherQueue?.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+        {
+            if (CellEditBox.Visibility == Visibility.Visible)
+            {
+                CellEditBox.Focus(FocusState.Keyboard);
+                CellEditBox.SelectionStart = caretPos;
+            }
+            else
+            {
+                CellFormulaBox.Focus(FocusState.Keyboard);
+                CellFormulaBox.SelectionStart = caretPos;
+            }
+            // Allow commit again
+            _suppressCommitOnFlyoutOpen = false;
+        });
+        
+        // Now enable reference picking since we have the opening paren
+        _isPickingFormulaReference = true;
     }
 
     private void LeftSplitter_PointerPressed(object sender, PointerRoutedEventArgs e)
@@ -2538,12 +3097,10 @@ public sealed partial class MainWindow : Page
                     return null;
                 }
 
+                // Continue loop with regenerated result
                 current = regenerated;
                 continue;
             }
-
-            // Cancel pressed
-            return null;
         }
 
         return null;
@@ -2551,32 +3108,27 @@ public sealed partial class MainWindow : Page
 
     private void ThemeToggle_Click(object sender, RoutedEventArgs e)
     {
-        // Simple, reliable theme toggle
         var prefs = App.PreferencesService.LoadPreferences();
         var currentTheme = prefs.Theme ?? "Dark";
         var newTheme = currentTheme == "Light" ? "Dark" : "Light";
-        
-        // Save preference
+
+    // Apply theme globally (map from string to enum)
+    var themeEnum = newTheme == "Light" ? CellVisualTheme.Light : CellVisualTheme.Dark;
+    App.ApplyCellStateTheme(themeEnum);
+        if (App.MainWindow?.Content is FrameworkElement rootElement)
+        {
+            rootElement.RequestedTheme = newTheme == "Light" ? ElementTheme.Light : ElementTheme.Dark;
+        }
+
         prefs.Theme = newTheme;
         App.PreferencesService.SavePreferences(prefs);
-        
-    // Apply theme
-        App.ApplyApplicationTheme(newTheme == "Light" ? AppTheme.Light : AppTheme.Dark);
-    App.ApplyCellStateTheme(newTheme == "Light" ? CellVisualTheme.Light : CellVisualTheme.Dark);
-        
-        // Refresh UI
-        RefreshFunctionCatalog();
-        if (ViewModel.SelectedSheet != null)
+
+        // Update toggle text if the button is available in the visual tree
+        if (this.FindName("ThemeToggleButton") is Button tb)
         {
-            BuildSpreadsheetGrid(ViewModel.SelectedSheet);
+            tb.Content = newTheme == "Light" ? "🌙 Dark" : "☀️ Light";
         }
-        
-        // Update button text
-        if (ThemeToggleButton != null)
-        {
-            ThemeToggleButton.Content = newTheme == "Light" ? "🌙 Dark" : "☀️ Light";
-        }
-        
+
         ViewModel.StatusMessage = $"Theme: {newTheme}";
     }
 
@@ -2613,6 +3165,9 @@ public sealed partial class MainWindow : Page
     /// </summary>
     private async void MainWindow_KeyDown(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
     {
+        // DEBUG: Log ALL key presses
+        System.Diagnostics.Debug.WriteLine($"MainWindow_KeyDown: Key pressed = {e.Key} ({(int)e.Key})");
+        
         var ctrl = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(Windows.System.VirtualKey.Control).HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
         var shift = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(Windows.System.VirtualKey.Shift).HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
         
@@ -2763,6 +3318,7 @@ public sealed partial class MainWindow : Page
             if (_selectedCell != null && _selectedButton != null)
             {
                 var charToAdd = VirtualKeyToString(e.Key);
+                System.Diagnostics.Debug.WriteLine($"MainWindow_KeyDown: Key {e.Key} mapped to '{charToAdd}'");
                 StartDirectEdit(_selectedCell, _selectedButton, charToAdd);
                 e.Handled = true;
                 return;
@@ -2932,6 +3488,8 @@ public sealed partial class MainWindow : Page
             Windows.System.VirtualKey.Z => "z",
             Windows.System.VirtualKey.Multiply => "*",
             Windows.System.VirtualKey.Add => "+",
+            (Windows.System.VirtualKey)187 => "=", // OEM plus key (:=)
+            (Windows.System.VirtualKey)189 => "-", // OEM minus key
             Windows.System.VirtualKey.Subtract => "-",
             Windows.System.VirtualKey.Divide => "/",
             Windows.System.VirtualKey.Decimal => ".",
@@ -3394,25 +3952,5 @@ public sealed partial class MainWindow : Page
         {
             BuildSpreadsheetGrid(ViewModel.SelectedSheet);
         }
-    }
-}
-
-public class ParameterHintItem
-{
-    public string Name { get; init; } = string.Empty;
-    public string Description { get; init; } = string.Empty;
-    public FontWeight Weight { get; init; } = FontWeights.Normal;
-    public Brush Brush { get; init; } = new SolidColorBrush(Colors.White);
-    public Visibility DescriptionVisibility => string.IsNullOrWhiteSpace(Description) ? Visibility.Collapsed : Visibility.Visible;
-
-    public static ParameterHintItem From(FunctionParameter parameter, bool isActive)
-    {
-        return new ParameterHintItem
-        {
-            Name = parameter.IsOptional ? $"{parameter.Name} (optional)" : parameter.Name,
-            Description = parameter.Description,
-            Weight = isActive ? FontWeights.SemiBold : FontWeights.Normal,
-            Brush = new SolidColorBrush(isActive ? Colors.DeepSkyBlue : Colors.White)
-        };
     }
 }
