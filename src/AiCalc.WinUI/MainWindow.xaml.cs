@@ -30,7 +30,6 @@ public sealed partial class MainWindow : Page
     private readonly Dictionary<string, FunctionDescriptor> _functionMap = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<ParameterHintItem> _parameterHints = new();
     private bool _isFormulaEditing;
-    private bool _processingTextChange; // Prevent re-entry when we modify the text
     private bool _updatingFormulaText; // Prevent re-entry in CellFormula_Changed
     private CellViewModel? _formulaEditTargetCell;
     private readonly List<(CellViewModel Cell, CellVisualState PreviousState)> _formulaHighlights = new();
@@ -67,16 +66,39 @@ public sealed partial class MainWindow : Page
     private const double DefaultRowHeight = 26;
     private const double ColumnWidthScale = 0.84; // reduce cell width by 16%
 
+    /// <summary>
+    /// Write debug message to both Debug output and Console (if available)
+    /// </summary>
+    private static void DebugLog(string message)
+    {
+        var timestampedMessage = $"[{DateTime.Now:HH:mm:ss.fff}] {message}";
+        System.Diagnostics.Debug.WriteLine(timestampedMessage);
+#if DEBUG
+        try
+        {
+            Console.WriteLine(timestampedMessage);
+        }
+        catch
+        {
+            // Ignore console write failures
+        }
+#endif
+    }
+
     public MainWindow()
     {
         ViewModel = new WorkbookViewModel();
         InitializeComponent();
+        
+        DebugLog("MainWindow: Constructor started");
         
         // Initialize with a default sheet
         if (ViewModel.Sheets.Count == 0)
         {
             ViewModel.NewSheetCommand.Execute(null);
         }
+        
+        DebugLog("MainWindow: Default sheet created");
         
         // Add F9 keyboard shortcut for Recalculate All (Task 10)
         this.KeyDown += MainWindow_KeyDown;
@@ -85,6 +107,8 @@ public sealed partial class MainWindow : Page
         InitializeFunctionSuggestions();
         RefreshSheetTabs();
         LoadPreferences();  // Load user preferences (Phase 5)
+        
+        DebugLog("MainWindow: Functions and preferences loaded");
         
         // Initialize theme toggle button text
         var prefs = App.PreferencesService.LoadPreferences();
@@ -98,6 +122,8 @@ public sealed partial class MainWindow : Page
         
         // Start Python SDK pipe server
         StartPipeServer();
+        
+        DebugLog("MainWindow: Initialization complete");
     }
 
     private void SettingsConnections_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -1010,6 +1036,8 @@ public sealed partial class MainWindow : Page
 
     private void SelectCell(CellViewModel cell, Button button)
     {
+        DebugLog($"SelectCell: {cell.Address} (Formula editing: {_isFormulaEditing})");
+        
         if (_isFormulaEditing && _isPickingFormulaReference && _formulaEditTargetCell != null && cell != _formulaEditTargetCell)
         {
             InsertCellReferenceIntoFormula(cell);
@@ -1611,12 +1639,15 @@ public sealed partial class MainWindow : Page
 
     private void StartDirectEdit(CellViewModel cell, Button button, string? initialCharacter = null)
     {
+        DebugLog($"StartDirectEdit: {cell.Address}, initialChar='{initialCharacter}'");
+        
         _isPickingFormulaReference = false;
         // Only allow direct edit for text/empty cells (not images, directories, etc.)
         if (cell.Value.ObjectType != CellObjectType.Text && 
             cell.Value.ObjectType != CellObjectType.Number &&
             cell.Value.ObjectType != CellObjectType.Empty)
         {
+            DebugLog($"StartDirectEdit: Cell type {cell.Value.ObjectType} not editable");
             return;
         }
 
@@ -1659,6 +1690,7 @@ public sealed partial class MainWindow : Page
             // If editing started with =, switch to formula editing mode and populate the Formula box
             if (initialCharacter.StartsWith("="))
             {
+                DebugLog($"StartDirectEdit: Entering formula mode with '{initialCharacter}'");
                 System.Diagnostics.Debug.WriteLine($"StartDirectEdit: Entering formula mode with text '{initialCharacter}'");
                 
                 // VISIBLE DEBUG: Show message box
@@ -1978,13 +2010,10 @@ public sealed partial class MainWindow : Page
 
     private void CellEditBox_TextChanged(object sender, TextChangedEventArgs e)
     {
-        // Prevent re-entry when we're modifying the text programmatically
-        if (_processingTextChange) return;
-        
         var textBox = sender as TextBox;
         if (textBox == null) return;
 
-        System.Diagnostics.Debug.WriteLine($"CellEditBox_TextChanged: text='{textBox.Text}', _isFormulaEditing={_isFormulaEditing}, _processingTextChange={_processingTextChange}");
+        System.Diagnostics.Debug.WriteLine($"CellEditBox_TextChanged: text='{textBox.Text}', _isFormulaEditing={_isFormulaEditing}");
 
         // If in formula mode, update intellisense as user types
         if (_isFormulaEditing && textBox.Text.StartsWith("="))
@@ -2026,8 +2055,7 @@ public sealed partial class MainWindow : Page
             {
                 System.Diagnostics.Debug.WriteLine("DEBUG: TextChanged detected '=' - switching to formula mode");
                 
-                // DON'T set _processingTextChange - we want subsequent keystrokes to trigger filtering
-                // Just call StartDirectEdit
+                // Call StartDirectEdit to switch to formula mode
                 StartDirectEdit(cell, button, textBox.Text);
             }
         }
@@ -2245,8 +2273,12 @@ public sealed partial class MainWindow : Page
 
     private async void RecalculateButton_Click(object sender, RoutedEventArgs e)
     {
+        DebugLog("RecalculateButton: Starting workbook recalculation");
+        
         // Recalculate All - same as F9 (Task 10)
         await ViewModel.EvaluateWorkbookCommand.ExecuteAsync(null);
+        
+        DebugLog("RecalculateButton: Recalculation complete");
         
         // Refresh display
         if (ViewModel.SelectedSheet != null)
@@ -3949,6 +3981,19 @@ public sealed partial class MainWindow : Page
         }
         
         if (ViewModel.SelectedSheet != null)
+        {
+            BuildSpreadsheetGrid(ViewModel.SelectedSheet);
+        }
+    }
+
+    /// <summary>
+    /// Handle spreadsheet scroll viewer size changes to expand grid to fill available space
+    /// </summary>
+    private void SpreadsheetScrollViewer_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        // Only rebuild if the size actually changed and we have a selected sheet
+        if (ViewModel.SelectedSheet != null && 
+            (e.PreviousSize.Width != e.NewSize.Width || e.PreviousSize.Height != e.NewSize.Height))
         {
             BuildSpreadsheetGrid(ViewModel.SelectedSheet);
         }

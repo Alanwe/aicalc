@@ -54,6 +54,12 @@ public partial class App : Application
     {
         try
         {
+#if DEBUG
+            // Initialize debug console for debug output
+            DebugConsole.EnsureInitialized();
+            Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] AiCalc starting...");
+#endif
+            
             base.OnLaunched(args);
             
             // Load user preferences (Phase 5)

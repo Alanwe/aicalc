@@ -211,7 +211,8 @@
                     <ScrollViewer x:Name="SpreadsheetScrollViewer" Grid.Row="1" 
                                   HorizontalScrollBarVisibility="Visible" 
                                   VerticalScrollBarVisibility="Visible"
-                                  Background="{ThemeResource AppBackgroundBrush}">
+                                  Background="{ThemeResource AppBackgroundBrush}"
+                                  SizeChanged="SpreadsheetScrollViewer_SizeChanged">
                         <Grid>
                             <Grid x:Name="SpreadsheetGrid" Margin="12"/>
                             <TextBox x:Name="CellEditBox"
