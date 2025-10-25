@@ -65,6 +65,7 @@ public sealed partial class MainWindow : Page
     private bool _justStartedInCellEdit; // Track that we just started in-cell editing to prevent double character
     private TextBox? _activeCellEditBox; // Currently active in-cell editor
     private CellViewModel? _formulaReferenceAnchor;
+    private CellViewModel? _formulaReferenceCurrent;
     private int _formulaReferenceInsertStart;
     private int _formulaReferenceInsertLength;
     private bool _formulaReferenceHasLeadingSeparator;
@@ -101,7 +102,11 @@ public sealed partial class MainWindow : Page
 
     private void ResetFormulaReferenceTracking()
     {
+        // Clear the overlay borders BEFORE clearing the tracking fields
+        ClearFormulaSelectionBorders();
+        
         _formulaReferenceAnchor = null;
+        _formulaReferenceCurrent = null;
         _formulaReferenceInsertStart = 0;
         _formulaReferenceInsertLength = 0;
         _formulaReferenceHasLeadingSeparator = false;
@@ -839,7 +844,17 @@ public sealed partial class MainWindow : Page
             Tag = "DisplayText"
         };
         
+        // Add a border overlay for formula selection highlighting (initially hidden)
+        var selectionBorder = new Border
+        {
+            BorderThickness = new Thickness(0),
+            BorderBrush = new SolidColorBrush(Colors.Transparent),
+            IsHitTestVisible = false,
+            Tag = "FormulaSelectionBorder"
+        };
+        
         grid.Children.Add(valueText);
+        grid.Children.Add(selectionBorder); // Add as overlay
         
         button.Content = grid;
         ApplyCellStyling(button, cellVm, valueText);
@@ -869,7 +884,7 @@ public sealed partial class MainWindow : Page
         return button;
     }
 
-    private void ApplyCellStyling(Button button, CellViewModel cellVm, TextBlock? valueText = null)
+    private void ApplyCellStyling(Button button, CellViewModel cellVm, TextBlock? valueText = null, bool skipBorderForFormulaEndpoint = false)
     {
         var isDefaultBackground = string.IsNullOrWhiteSpace(cellVm.FormatBackground) ||
             string.Equals(cellVm.FormatBackground, CellFormat.DefaultBackgroundColor, StringComparison.OrdinalIgnoreCase);
@@ -888,17 +903,20 @@ public sealed partial class MainWindow : Page
             button.Background = new SolidColorBrush(backgroundColor);
         }
 
-        if (isDefaultBorder && Application.Current.Resources.TryGetValue("CellThemeBorderBrush", out var borderBrush) && borderBrush is SolidColorBrush themeBorder)
+        if (!skipBorderForFormulaEndpoint)
         {
-            button.BorderBrush = themeBorder;
-        }
-        else
-        {
-            var borderColor = ParseColor(cellVm.FormatBorder);
-            button.BorderBrush = new SolidColorBrush(borderColor);
-        }
+            if (isDefaultBorder && Application.Current.Resources.TryGetValue("CellThemeBorderBrush", out var borderBrush) && borderBrush is SolidColorBrush themeBorder)
+            {
+                button.BorderBrush = themeBorder;
+            }
+            else
+            {
+                var borderColor = ParseColor(cellVm.FormatBorder);
+                button.BorderBrush = new SolidColorBrush(borderColor);
+            }
 
-        button.BorderThickness = new Thickness(cellVm.Format.BorderThickness);
+            button.BorderThickness = new Thickness(cellVm.Format.BorderThickness);
+        }
 
         valueText ??= (button.Content as Grid)?.Children.OfType<TextBlock>().FirstOrDefault(tb => "DisplayText".Equals(tb.Tag));
         if (valueText != null)
@@ -919,29 +937,77 @@ public sealed partial class MainWindow : Page
             valueText.FontStyle = cellVm.Format.IsItalic ? FontStyle.Italic : FontStyle.Normal;
         }
 
-        switch (cellVm.VisualState)
+        // Apply visual state styling to the button border; keep the overlay clear unless formula selection is active
+        var selectionBorder = (button.Content as Grid)?.Children.OfType<Border>().FirstOrDefault(b => "FormulaSelectionBorder".Equals(b.Tag));
+        var formulaSelectionActive = _isFormulaEditing && _isPickingFormulaReference;
+        
+        if (!skipBorderForFormulaEndpoint)
         {
-            case CellVisualState.InDependencyChain:
-                if (Application.Current.Resources.TryGetValue("CellStateInDependencyChainBrush", out var depBrush))
-                    button.BorderBrush = depBrush as SolidColorBrush ?? new SolidColorBrush(Colors.DeepSkyBlue);
-                else
-                    button.BorderBrush = new SolidColorBrush(Colors.DeepSkyBlue);
-                button.BorderThickness = new Thickness(2);
-                break;
-            case CellVisualState.Error:
-                if (Application.Current.Resources.TryGetValue("CellStateErrorBrush", out var errBrush))
-                    button.BorderBrush = errBrush as SolidColorBrush ?? new SolidColorBrush(Colors.OrangeRed);
-                else
-                    button.BorderBrush = new SolidColorBrush(Colors.OrangeRed);
-                button.BorderThickness = new Thickness(2);
-                break;
-            case CellVisualState.JustUpdated:
-                if (Application.Current.Resources.TryGetValue("CellStateJustUpdatedBrush", out var updBrush))
-                    button.BorderBrush = updBrush as SolidColorBrush ?? new SolidColorBrush(Colors.LimeGreen);
-                else
-                    button.BorderBrush = new SolidColorBrush(Colors.LimeGreen);
-                button.BorderThickness = new Thickness(2);
-                break;
+            switch (cellVm.VisualState)
+            {
+                case CellVisualState.InDependencyChain:
+                    if (Application.Current.Resources.TryGetValue("CellStateInDependencyChainBrush", out var depBrush))
+                        button.BorderBrush = depBrush as SolidColorBrush ?? new SolidColorBrush(Colors.DeepSkyBlue);
+                    else
+                        button.BorderBrush = new SolidColorBrush(Colors.DeepSkyBlue);
+                    button.BorderThickness = new Thickness(2);
+                    break;
+                case CellVisualState.Error:
+                    if (Application.Current.Resources.TryGetValue("CellStateErrorBrush", out var errBrush))
+                        button.BorderBrush = errBrush as SolidColorBrush ?? new SolidColorBrush(Colors.OrangeRed);
+                    else
+                        button.BorderBrush = new SolidColorBrush(Colors.OrangeRed);
+                    button.BorderThickness = new Thickness(2);
+                    break;
+                case CellVisualState.JustUpdated:
+                    if (Application.Current.Resources.TryGetValue("CellStateJustUpdatedBrush", out var updBrush))
+                        button.BorderBrush = updBrush as SolidColorBrush ?? new SolidColorBrush(Colors.LimeGreen);
+                    else
+                        button.BorderBrush = new SolidColorBrush(Colors.LimeGreen);
+                    button.BorderThickness = new Thickness(2);
+                    break;
+            }
+
+            if (selectionBorder != null)
+            {
+                selectionBorder.BorderThickness = new Thickness(0);
+                selectionBorder.BorderBrush = new SolidColorBrush(Colors.Transparent);
+            }
+        }
+        else
+        {
+            // For formula endpoints, allow the overlay to reflect visual states only when not actively picking a reference
+            if (selectionBorder != null && !formulaSelectionActive)
+            {
+                switch (cellVm.VisualState)
+                {
+                    case CellVisualState.InDependencyChain:
+                        if (Application.Current.Resources.TryGetValue("CellStateInDependencyChainBrush", out var depBrush))
+                            selectionBorder.BorderBrush = depBrush as SolidColorBrush ?? new SolidColorBrush(Colors.DeepSkyBlue);
+                        else
+                            selectionBorder.BorderBrush = new SolidColorBrush(Colors.DeepSkyBlue);
+                        selectionBorder.BorderThickness = new Thickness(2);
+                        break;
+                    case CellVisualState.Error:
+                        if (Application.Current.Resources.TryGetValue("CellStateErrorBrush", out var errBrush))
+                            selectionBorder.BorderBrush = errBrush as SolidColorBrush ?? new SolidColorBrush(Colors.OrangeRed);
+                        else
+                            selectionBorder.BorderBrush = new SolidColorBrush(Colors.OrangeRed);
+                        selectionBorder.BorderThickness = new Thickness(2);
+                        break;
+                    case CellVisualState.JustUpdated:
+                        if (Application.Current.Resources.TryGetValue("CellStateJustUpdatedBrush", out var updBrush))
+                            selectionBorder.BorderBrush = updBrush as SolidColorBrush ?? new SolidColorBrush(Colors.LimeGreen);
+                        else
+                            selectionBorder.BorderBrush = new SolidColorBrush(Colors.LimeGreen);
+                        selectionBorder.BorderThickness = new Thickness(2);
+                        break;
+                    default:
+                        selectionBorder.BorderThickness = new Thickness(0);
+                        selectionBorder.BorderBrush = new SolidColorBrush(Colors.Transparent);
+                        break;
+                }
+            }
         }
     }
 
@@ -1245,26 +1311,138 @@ public sealed partial class MainWindow : Page
 
     private void UpdateSelectionVisuals()
     {
+        DebugLog($"UPDATE_VISUALS: Called, _isFormulaEditing={_isFormulaEditing}, _isPickingFormulaReference={_isPickingFormulaReference}");
+        
         foreach (var child in SpreadsheetGrid.Children.OfType<Button>())
         {
             if (child.Tag is CellViewModel vm)
             {
-                ApplyCellStyling(child, vm);
-                vm.IsSelected = _multiSelection.Contains(vm);
-                if (_multiSelection.Contains(vm))
+                // Check if this is a formula range endpoint
+                bool isFormulaRangeEndpoint = _isFormulaEditing && _isPickingFormulaReference &&
+                    (ReferenceEquals(vm, _formulaReferenceAnchor) || ReferenceEquals(vm, _formulaReferenceCurrent));
+                
+                if (isFormulaRangeEndpoint)
                 {
-                    if (ReferenceEquals(vm, _selectedCell))
+                    DebugLog($"UPDATE_VISUALS: Processing formula endpoint {vm.Address}, calling ApplyCellStyling with skipBorder=true");
+                }
+                
+                // Apply base cell styling (but skip border changes for formula endpoints)
+                ApplyCellStyling(child, vm, null, skipBorderForFormulaEndpoint: isFormulaRangeEndpoint);
+                
+                // Clear overlay border for non-endpoint cells to avoid double borders
+                // BUT: Don't clear if the cell has an active visual state (JustUpdated, Error, InDependencyChain)
+                if (!isFormulaRangeEndpoint && vm.VisualState == CellVisualState.Normal)
+                {
+                    var selectionBorder = (child.Content as Grid)?.Children.OfType<Border>().FirstOrDefault(b => "FormulaSelectionBorder".Equals(b.Tag));
+                    if (selectionBorder != null && (selectionBorder.BorderThickness.Left > 0 || selectionBorder.BorderThickness.Top > 0))
                     {
-                        child.BorderBrush = new SolidColorBrush(Colors.DodgerBlue);
-                        child.BorderThickness = new Thickness(2);
-                    }
-                    else
-                    {
-                        child.BorderBrush = new SolidColorBrush(Color.FromArgb(0xFF, 0x64, 0x95, 0xED));
-                        child.BorderThickness = new Thickness(1.5);
+                        // Clear the overlay border for non-endpoints with normal visual state
+                        selectionBorder.BorderThickness = new Thickness(0);
+                        selectionBorder.BorderBrush = new SolidColorBrush(Colors.Transparent);
                     }
                 }
+                
+                if (isFormulaRangeEndpoint)
+                {
+                    DebugLog($"UPDATE_VISUALS: After ApplyCellStyling for {vm.Address}: border brush={child.BorderBrush}, thickness={child.BorderThickness}");
+                }
+                
+                if (!isFormulaRangeEndpoint)
+                {
+                    vm.IsSelected = _multiSelection.Contains(vm);
+                    if (_multiSelection.Contains(vm))
+                    {
+                        if (ReferenceEquals(vm, _selectedCell))
+                        {
+                            child.BorderBrush = new SolidColorBrush(Colors.DodgerBlue);
+                            child.BorderThickness = new Thickness(2);
+                        }
+                        else
+                        {
+                            child.BorderBrush = new SolidColorBrush(Color.FromArgb(0xFF, 0x64, 0x95, 0xED));
+                            child.BorderThickness = new Thickness(1.5);
+                        }
+                    }
+                }
+                else
+                {
+                    // Formula range endpoints - don't mark as selected to avoid selection background
+                    vm.IsSelected = false;
+                }
             }
+        }
+
+        if (_isFormulaEditing && _isPickingFormulaReference)
+        {
+            DebugLog($"UPDATE_VISUALS: About to call ApplyFormulaReferenceSelectionStyles");
+            ApplyFormulaReferenceSelectionStyles();
+            
+            // Check what happened after applying styles
+            if (_formulaReferenceAnchor != null)
+            {
+                var anchorButton = GetButtonForCell(_formulaReferenceAnchor);
+                if (anchorButton != null)
+                {
+                    DebugLog($"UPDATE_VISUALS: Final check - Anchor {_formulaReferenceAnchor.Address} border brush={anchorButton.BorderBrush}, thickness={anchorButton.BorderThickness}");
+                }
+            }
+            if (_formulaReferenceCurrent != null && !ReferenceEquals(_formulaReferenceCurrent, _formulaReferenceAnchor))
+            {
+                var currentButton = GetButtonForCell(_formulaReferenceCurrent);
+                if (currentButton != null)
+                {
+                    DebugLog($"UPDATE_VISUALS: Final check - Current {_formulaReferenceCurrent.Address} border brush={currentButton.BorderBrush}, thickness={currentButton.BorderThickness}");
+                }
+            }
+        }
+    }
+
+    private void ApplyFormulaReferenceSelectionStyles()
+    {
+        DebugLog($"APPLY_FORMULA_STYLES: Called! anchor={_formulaReferenceAnchor?.Address.ToString() ?? "null"}, current={_formulaReferenceCurrent?.Address.ToString() ?? "null"}");
+        
+        if (_formulaReferenceAnchor != null)
+        {
+            var anchorButton = GetButtonForCell(_formulaReferenceAnchor);
+            DebugLog($"APPLY_FORMULA_STYLES: Anchor button is {(anchorButton == null ? "NULL" : "FOUND")}");
+            if (anchorButton != null)
+            {
+                var selectionBorder = (anchorButton.Content as Grid)?.Children.OfType<Border>().FirstOrDefault(b => "FormulaSelectionBorder".Equals(b.Tag));
+                if (selectionBorder != null)
+                {
+                    selectionBorder.BorderBrush = new SolidColorBrush(Colors.DodgerBlue);
+                    selectionBorder.BorderThickness = new Thickness(3);
+                    DebugLog($"APPLY_FORMULA_STYLES: Applied DodgerBlue overlay border to anchor {_formulaReferenceAnchor.Address}");
+                }
+                else
+                {
+                    DebugLog($"APPLY_FORMULA_STYLES: WARNING - Could not find FormulaSelectionBorder for anchor");
+                }
+            }
+        }
+
+        if (_formulaReferenceCurrent != null && !ReferenceEquals(_formulaReferenceCurrent, _formulaReferenceAnchor))
+        {
+            var endButton = GetButtonForCell(_formulaReferenceCurrent);
+            DebugLog($"APPLY_FORMULA_STYLES: Current button is {(endButton == null ? "NULL" : "FOUND")}");
+            if (endButton != null)
+            {
+                var selectionBorder = (endButton.Content as Grid)?.Children.OfType<Border>().FirstOrDefault(b => "FormulaSelectionBorder".Equals(b.Tag));
+                if (selectionBorder != null)
+                {
+                    selectionBorder.BorderBrush = new SolidColorBrush(Colors.DodgerBlue);
+                    selectionBorder.BorderThickness = new Thickness(3);
+                    DebugLog($"APPLY_FORMULA_STYLES: Applied DodgerBlue overlay border to current {_formulaReferenceCurrent.Address}");
+                }
+                else
+                {
+                    DebugLog($"APPLY_FORMULA_STYLES: WARNING - Could not find FormulaSelectionBorder for current");
+                }
+            }
+        }
+        else if (_formulaReferenceCurrent != null)
+        {
+            DebugLog($"APPLY_FORMULA_STYLES: Skipping current - same as anchor");
         }
     }
 
@@ -3355,9 +3533,13 @@ public sealed partial class MainWindow : Page
         UpdateFormulaEditorText(activeEditor, updatedText, insertStart + reference.Length);
 
         _formulaReferenceAnchor = cell;
+        _formulaReferenceCurrent = cell;
         _formulaReferenceInsertStart = insertStart;
         _formulaReferenceInsertLength = reference.Length;
         _formulaReferenceHasLeadingSeparator = reference.StartsWith(",", StringComparison.Ordinal);
+
+        // Apply blue border immediately
+        ApplyFormulaReferenceSelectionStyles();
 
         _isClickingCellForReference = false;
 
@@ -3431,6 +3613,10 @@ public sealed partial class MainWindow : Page
         _formulaReferenceInsertStart = insertStart;
         _formulaReferenceInsertLength = replacement.Length;
         _formulaReferenceHasLeadingSeparator = replacement.StartsWith(",", StringComparison.Ordinal);
+        _formulaReferenceCurrent = cell;
+
+        // Apply blue border immediately
+        ApplyFormulaReferenceSelectionStyles();
 
         UpdateFormulaEditorText(activeEditor, updatedText, insertStart + replacement.Length);
 
@@ -3564,7 +3750,9 @@ public sealed partial class MainWindow : Page
         var button = GetButtonForCell(cell);
         if (button != null)
         {
-            ApplyCellStyling(button, cell);
+            var skipBorder = _isFormulaEditing && _isPickingFormulaReference &&
+                (ReferenceEquals(cell, _formulaReferenceAnchor) || ReferenceEquals(cell, _formulaReferenceCurrent));
+            ApplyCellStyling(button, cell, skipBorderForFormulaEndpoint: skipBorder);
         }
     }
 
@@ -3650,6 +3838,56 @@ public sealed partial class MainWindow : Page
 
         _formulaHighlights.Clear();
         _activeFormulaRangeHighlights.Clear();
+        
+        // Clear formula selection overlay borders
+        ClearFormulaSelectionBorders();
+    }
+    
+    private void ClearFormulaSelectionBorders()
+    {
+        // Clear overlay borders from anchor and current cells
+        if (_formulaReferenceAnchor != null)
+        {
+            var button = GetButtonForCell(_formulaReferenceAnchor);
+            if (button != null)
+            {
+                var selectionBorder = (button.Content as Grid)?.Children.OfType<Border>().FirstOrDefault(b => "FormulaSelectionBorder".Equals(b.Tag));
+                if (selectionBorder != null)
+                {
+                    selectionBorder.BorderThickness = new Thickness(0);
+                    selectionBorder.BorderBrush = new SolidColorBrush(Colors.Transparent);
+                }
+            }
+        }
+        
+        if (_formulaReferenceCurrent != null && !ReferenceEquals(_formulaReferenceCurrent, _formulaReferenceAnchor))
+        {
+            var button = GetButtonForCell(_formulaReferenceCurrent);
+            if (button != null)
+            {
+                var selectionBorder = (button.Content as Grid)?.Children.OfType<Border>().FirstOrDefault(b => "FormulaSelectionBorder".Equals(b.Tag));
+                if (selectionBorder != null)
+                {
+                    selectionBorder.BorderThickness = new Thickness(0);
+                    selectionBorder.BorderBrush = new SolidColorBrush(Colors.Transparent);
+                }
+            }
+        }
+        
+        // Also clear overlay borders from all cells in the highlighted range
+        foreach (var cell in _activeFormulaRangeHighlights.ToList())
+        {
+            var button = GetButtonForCell(cell);
+            if (button != null)
+            {
+                var selectionBorder = (button.Content as Grid)?.Children.OfType<Border>().FirstOrDefault(b => "FormulaSelectionBorder".Equals(b.Tag));
+                if (selectionBorder != null)
+                {
+                    selectionBorder.BorderThickness = new Thickness(0);
+                    selectionBorder.BorderBrush = new SolidColorBrush(Colors.Transparent);
+                }
+            }
+        }
     }
 
     private void InsertFunctionSuggestion(FunctionSuggestion suggestion)
