@@ -33,6 +33,7 @@ public sealed partial class MainWindow : Page
     private bool _updatingFormulaText; // Prevent re-entry in CellFormula_Changed
     private CellViewModel? _formulaEditTargetCell;
     private readonly List<(CellViewModel Cell, CellVisualState PreviousState)> _formulaHighlights = new();
+    private readonly List<CellViewModel> _activeFormulaRangeHighlights = new();
     private readonly HashSet<CellViewModel> _validationErrorCells = new();
     private readonly List<CellViewModel> _multiSelection = new();
     private readonly Dictionary<CellObjectType, StackPanel> _functionGroups = new();
@@ -60,11 +61,52 @@ public sealed partial class MainWindow : Page
     private bool _inspectorVisible = true;
     private bool _isNavigatingBetweenCells = false;
     private bool _isPickingFormulaReference;
+    private bool _isClickingCellForReference; // Track when user is actively clicking a cell for formula reference
+    private bool _justStartedInCellEdit; // Track that we just started in-cell editing to prevent double character
+    private TextBox? _activeCellEditBox; // Currently active in-cell editor
+    private CellViewModel? _formulaReferenceAnchor;
+    private int _formulaReferenceInsertStart;
+    private int _formulaReferenceInsertLength;
+    private bool _formulaReferenceHasLeadingSeparator;
     private int? _columnContextIndex;
     private int? _rowContextIndex;
     // Reduced default row height further (20% reduction from 32)
     private const double DefaultRowHeight = 26;
     private const double ColumnWidthScale = 0.84; // reduce cell width by 16%
+
+    private void SetFormulaEditorHitTest(bool enabled)
+    {
+        DebugLog($"HITTEST: Setting editor hit test to {enabled}");
+        if (_activeCellEditBox != null)
+        {
+            _activeCellEditBox.IsHitTestVisible = enabled;
+        }
+        if (CellEditBox != null)
+        {
+            CellEditBox.IsHitTestVisible = enabled;
+        }
+    }
+
+    private void UpdateParameterHintDismissBehavior()
+    {
+        if (ParameterHintPopup != null)
+        {
+            ParameterHintPopup.IsLightDismissEnabled = !_isPickingFormulaReference;
+            if (_isPickingFormulaReference)
+            {
+                ParameterHintPopup.IsOpen = false;
+            }
+        }
+    }
+
+    private void ResetFormulaReferenceTracking()
+    {
+        _formulaReferenceAnchor = null;
+        _formulaReferenceInsertStart = 0;
+        _formulaReferenceInsertLength = 0;
+        _formulaReferenceHasLeadingSeparator = false;
+        _activeFormulaRangeHighlights.Clear();
+    }
 
     /// <summary>
     /// Write debug message to both Debug output and Console (if available)
@@ -124,6 +166,35 @@ public sealed partial class MainWindow : Page
         StartPipeServer();
         
         DebugLog("MainWindow: Initialization complete");
+
+        AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler(MainWindow_PointerPressed), true);
+    }
+
+    private void MainWindow_PointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        var point = e.GetCurrentPoint(this);
+        var properties = point.Properties;
+
+        var pressed = new List<string>(3);
+        if (properties.IsLeftButtonPressed) pressed.Add("Left");
+        if (properties.IsRightButtonPressed) pressed.Add("Right");
+        if (properties.IsMiddleButtonPressed) pressed.Add("Middle");
+        if (properties.IsXButton1Pressed) pressed.Add("X1");
+        if (properties.IsXButton2Pressed) pressed.Add("X2");
+
+        if (pressed.Count == 0)
+        {
+            return;
+        }
+
+        var deviceType = e.Pointer?.PointerDeviceType.ToString() ?? "Unknown";
+        var position = point.Position;
+        var sourceName = e.OriginalSource?.GetType().Name ?? "(null)";
+        var focusName = FocusManager.GetFocusedElement() is DependencyObject focused
+            ? focused.GetType().Name
+            : "(null)";
+        DebugLog($"POINTER_CLICK: {string.Join("+", pressed)} at {position.X:F1},{position.Y:F1} device={deviceType} source={sourceName}");
+        DebugLog($"FOCUS_STATE: FocusedElement={focusName}");
     }
 
     private void SettingsConnections_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -564,6 +635,8 @@ public sealed partial class MainWindow : Page
         SpreadsheetGrid.Children.Clear();
         SpreadsheetGrid.RowDefinitions.Clear();
         SpreadsheetGrid.ColumnDefinitions.Clear();
+        _activeCellEditBox = null;
+        _justStartedInCellEdit = false;
 
         var visibleRows = sheet.GetVisibleRowIndices().ToList();
 
@@ -743,30 +816,51 @@ public sealed partial class MainWindow : Page
             Tag = cellVm
         };
         
-        var stack = new StackPanel { Spacing = 6 };
+        // Create a Grid to hold either TextBlock (display) or TextBox (editing)
+        var grid = new Grid
+        {
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Stretch
+        };
         
         // Show value directly without cell label
         var textBrush = Application.Current.Resources["TextPrimaryBrush"] as SolidColorBrush
             ?? new SolidColorBrush(Color.FromArgb(0xFF, 0xCC, 0xCC, 0xCC));
         
-            var valueText = new TextBlock
-            {
-                Text = cellVm.DisplayValue,
-                Foreground = textBrush,
-                FontSize = 10,
-                TextWrapping = TextWrapping.NoWrap,
-                MaxLines = 1,
+        var valueText = new TextBlock
+        {
+            Text = cellVm.DisplayValue,
+            Foreground = textBrush,
+            FontSize = 10,
+            TextWrapping = TextWrapping.NoWrap,
+            MaxLines = 1,
             TextTrimming = TextTrimming.CharacterEllipsis,
-            VerticalAlignment = VerticalAlignment.Center
+            VerticalAlignment = VerticalAlignment.Center,
+            Tag = "DisplayText"
         };
         
-        stack.Children.Add(valueText);
+        grid.Children.Add(valueText);
         
-        button.Content = stack;
+        button.Content = grid;
         ApplyCellStyling(button, cellVm, valueText);
-        button.Click += (s, e) => SelectCell(cellVm, button);
-        button.DoubleTapped += (s, e) => StartDirectEdit(cellVm, button);
-    button.PointerPressed += CellButton_PointerPressed;
+        button.Click += (s, e) =>
+        {
+            DebugLog($"CLICK EVENT: Cell {cellVm.Address} clicked, _isFormulaEditing={_isFormulaEditing}, _isPickingFormulaReference={_isPickingFormulaReference}");
+            SelectCell(cellVm, button);
+        };
+        button.DoubleTapped += (s, e) =>
+        {
+            e.Handled = true;
+            StartInCellEdit(cellVm, button);
+        };
+        button.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler(CellButton_PointerPressed), true);
+        button.PointerEntered += (s, e) =>
+        {
+            if (_isFormulaEditing && _isPickingFormulaReference)
+            {
+                DebugLog($"POINTER_ENTER: Hovering over {cellVm.Address}, ready for selection");
+            }
+        };
         
         // Attach context menu (Phase 5 Task 16)
         button.ContextFlyout = Resources["CellContextMenu"] as MenuFlyout;
@@ -806,7 +900,7 @@ public sealed partial class MainWindow : Page
 
         button.BorderThickness = new Thickness(cellVm.Format.BorderThickness);
 
-        valueText ??= (button.Content as StackPanel)?.Children.OfType<TextBlock>().FirstOrDefault();
+        valueText ??= (button.Content as Grid)?.Children.OfType<TextBlock>().FirstOrDefault(tb => "DisplayText".Equals(tb.Tag));
         if (valueText != null)
         {
             valueText.Text = cellVm.DisplayValue;
@@ -1037,17 +1131,45 @@ public sealed partial class MainWindow : Page
     private void SelectCell(CellViewModel cell, Button button)
     {
         DebugLog($"SelectCell: {cell.Address} (Formula editing: {_isFormulaEditing})");
-        
-        if (_isFormulaEditing && _isPickingFormulaReference && _formulaEditTargetCell != null && cell != _formulaEditTargetCell)
-        {
-            InsertCellReferenceIntoFormula(cell);
-            return;
-        }
 
         var ctrl = InputKeyboardSource.GetKeyStateForCurrentThread(Windows.System.VirtualKey.Control)
             .HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
         var shift = InputKeyboardSource.GetKeyStateForCurrentThread(Windows.System.VirtualKey.Shift)
             .HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
+        
+        // If there's an in-cell edit active on a different cell, commit it first (unless we're picking references)
+        if (_selectedCell != null && _selectedCell != cell && _selectedButton != null && (!_isFormulaEditing || !_isPickingFormulaReference))
+        {
+            if (_selectedButton.Content is Grid grid)
+            {
+                var editBox = grid.Children.OfType<TextBox>().FirstOrDefault(tb => "EditBox".Equals(tb.Tag));
+                if (editBox != null)
+                {
+                    DebugLog($"SelectCell: Committing previous cell edit before selecting new cell");
+                    CommitInCellEdit(_selectedCell, _selectedButton, editBox.Text);
+                }
+            }
+        }
+        
+        if (_isFormulaEditing && _isPickingFormulaReference && _formulaEditTargetCell != null && cell != _formulaEditTargetCell)
+        {
+            if (shift && _formulaReferenceAnchor != null)
+            {
+                DebugLog($"SelectCell: Extending range from {_formulaReferenceAnchor.Address} to {cell.Address}");
+                ExtendFormulaReferenceRange(cell);
+            }
+            else
+            {
+                DebugLog($"SelectCell: Inserting reference to {cell.Address} into formula");
+                InsertCellReferenceIntoFormula(cell);
+            }
+            return;
+        }
+        
+        if (_isFormulaEditing && _isPickingFormulaReference)
+        {
+            DebugLog($"SelectCell: In picking mode but conditions not met - _formulaEditTargetCell={(_formulaEditTargetCell?.Address.ToString() ?? "null")}, clickedCell={cell.Address}, same={cell == _formulaEditTargetCell}");
+        }
 
         var nextActive = cell;
 
@@ -1641,7 +1763,13 @@ public sealed partial class MainWindow : Page
     {
         DebugLog($"StartDirectEdit: {cell.Address}, initialChar='{initialCharacter}'");
         
+        if (_isPickingFormulaReference)
+        {
+            ResetFormulaReferenceTracking();
+        }
         _isPickingFormulaReference = false;
+        UpdateParameterHintDismissBehavior();
+        SetFormulaEditorHitTest(true);
         // Only allow direct edit for text/empty cells (not images, directories, etc.)
         if (cell.Value.ObjectType != CellObjectType.Text && 
             cell.Value.ObjectType != CellObjectType.Number &&
@@ -1743,7 +1871,13 @@ public sealed partial class MainWindow : Page
                     // Keep CellEditBox VISIBLE and FOCUSED for typing
                     CellEditBox.Focus(FocusState.Keyboard);
                     CellEditBox.SelectionStart = CellEditBox.Text.Length;
+                    if (_isPickingFormulaReference)
+                    {
+                        ResetFormulaReferenceTracking();
+                    }
                     _isPickingFormulaReference = false;
+                    UpdateParameterHintDismissBehavior();
+                    SetFormulaEditorHitTest(true);
                     
                     // Show intellisense immediately
                     ShowFormulaIntellisense();
@@ -1770,11 +1904,310 @@ public sealed partial class MainWindow : Page
         }
     }
 
+    private void StartInCellEdit(CellViewModel cell, Button button, string? initialCharacter = null)
+    {
+        DebugLog($"StartInCellEdit: {cell.Address}, initialChar='{initialCharacter}'");
+        
+        // Only allow editing for text/number/empty cells
+        if (cell.Value.ObjectType != CellObjectType.Text && 
+            cell.Value.ObjectType != CellObjectType.Number &&
+            cell.Value.ObjectType != CellObjectType.Empty)
+        {
+            DebugLog($"StartInCellEdit: Cell type {cell.Value.ObjectType} not editable");
+            return;
+        }
+
+        // Get the Grid container from the button
+        if (button.Content is not Grid grid)
+        {
+            DebugLog("StartInCellEdit: Button content is not a Grid");
+            return;
+        }
+
+        // Create TextBox for in-cell editing
+        var textBrush = Application.Current.Resources["TextPrimaryBrush"] as SolidColorBrush
+            ?? new SolidColorBrush(Color.FromArgb(0xFF, 0xCC, 0xCC, 0xCC));
+        
+        var editBox = new TextBox
+        {
+            Text = initialCharacter ?? cell.RawValue ?? string.Empty,
+            Foreground = textBrush,
+            Background = new SolidColorBrush(Colors.Transparent),
+            BorderThickness = new Thickness(0),
+            FontSize = 10,
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            Tag = "EditBox",
+            AcceptsReturn = false
+        };
+
+        // Track active editor and prevent double character input
+        _activeCellEditBox = editBox;
+        _justStartedInCellEdit = true;
+
+        editBox.PreviewKeyDown += (s, e) =>
+        {
+            if (_justStartedInCellEdit)
+            {
+                // First key event after editor activation should be ignored if it is the triggering key
+                _justStartedInCellEdit = false;
+                if (!string.IsNullOrEmpty(initialCharacter))
+                {
+                    e.Handled = true;
+                }
+            }
+        };
+
+        // Handle Enter to commit, Escape to cancel
+        editBox.KeyDown += (s, e) =>
+        {
+            if (FunctionAutocompletePopup.IsOpen)
+            {
+                if (e.Key == Windows.System.VirtualKey.Down)
+                {
+                    if (FunctionAutocompleteList.SelectedIndex < FunctionAutocompleteList.Items.Count - 1)
+                    {
+                        FunctionAutocompleteList.SelectedIndex++;
+                    }
+                    e.Handled = true;
+                    return;
+                }
+                if (e.Key == Windows.System.VirtualKey.Up)
+                {
+                    if (FunctionAutocompleteList.SelectedIndex > 0)
+                    {
+                        FunctionAutocompleteList.SelectedIndex--;
+                    }
+                    e.Handled = true;
+                    return;
+                }
+                if (e.Key == Windows.System.VirtualKey.Enter || e.Key == Windows.System.VirtualKey.Tab)
+                {
+                    if (FunctionAutocompleteList.SelectedItem is FunctionSuggestion suggestion)
+                    {
+                        InsertFunctionSuggestion(suggestion);
+                        e.Handled = true;
+                        return;
+                    }
+                }
+                if (e.Key == Windows.System.VirtualKey.Escape)
+                {
+                    FunctionAutocompletePopup.IsOpen = false;
+                    FunctionAutocompleteFlyout.Hide();
+                    VisibleFunctionList.Visibility = Visibility.Collapsed;
+                    e.Handled = true;
+                    return;
+                }
+            }
+
+            if (e.Key == Windows.System.VirtualKey.Enter)
+            {
+                e.Handled = true;
+                CommitInCellEdit(cell, button, editBox.Text);
+            }
+            else if (e.Key == Windows.System.VirtualKey.Escape)
+            {
+                e.Handled = true;
+                CancelInCellEdit(cell, button);
+            }
+        };
+
+        // Handle key up to show intellisense
+        editBox.KeyUp += (s, e) =>
+        {
+            var text = editBox.Text;
+            if (!string.IsNullOrEmpty(text) && text.StartsWith("="))
+            {
+                // Show function intellisense
+                ShowFormulaIntellisense();
+                UpdateParameterHints();
+            }
+        };
+
+        // Handle text changes to detect formula mode and sync with formula bar
+        editBox.TextChanged += (s, e) =>
+        {
+            if (_updatingFormulaText)
+            {
+                return;
+            }
+
+            var text = editBox.Text;
+            if (!string.IsNullOrEmpty(text) && text.StartsWith("="))
+            {
+                _isFormulaEditing = true;
+                _formulaEditTargetCell = cell;
+                if (_isPickingFormulaReference)
+                {
+                    SetFormulaEditorHitTest(true);
+                    ResetFormulaReferenceTracking();
+                    _isPickingFormulaReference = false;
+                    UpdateParameterHintDismissBehavior();
+                }
+                
+                // Update formula bar
+                _updatingFormulaText = true;
+                try
+                {
+                    CellFormulaBox.Text = text;
+                }
+                finally
+                {
+                    _updatingFormulaText = false;
+                }
+                
+                // Show function suggestions
+                ShowFormulaIntellisense();
+                UpdateParameterHints();
+            }
+        };
+
+        // Remove the LostFocus handler - we'll commit explicitly on Enter or when user clicks another cell
+        // editBox.LostFocus handler removed to prevent premature commits
+
+        // Hide TextBlock and show TextBox
+        foreach (var child in grid.Children.OfType<TextBlock>().ToList())
+        {
+            if ("DisplayText".Equals(child.Tag))
+            {
+                child.Visibility = Visibility.Collapsed;
+            }
+        }
+        
+        grid.Children.Add(editBox);
+        
+        // Focus immediately so subsequent keystrokes are captured
+        editBox.Focus(FocusState.Programmatic);
+        
+        // If initial character provided, position cursor at end
+        if (!string.IsNullOrEmpty(initialCharacter))
+        {
+            editBox.SelectionStart = editBox.Text.Length;
+        }
+        else
+        {
+            editBox.SelectAll();
+        }
+    }
+
+    private void CommitInCellEdit(CellViewModel cell, Button button, string newValue)
+    {
+        DebugLog($"CommitInCellEdit: {cell.Address}, value='{newValue}'");
+        
+        // Update cell value
+        cell.RawValue = newValue;
+        
+        // Remove edit box and restore display
+        if (button.Content is Grid grid)
+        {
+            var editBox = grid.Children.OfType<TextBox>().FirstOrDefault(tb => "EditBox".Equals(tb.Tag));
+            if (editBox != null)
+            {
+                grid.Children.Remove(editBox);
+            }
+            
+            foreach (var child in grid.Children.OfType<TextBlock>())
+            {
+                if ("DisplayText".Equals(child.Tag))
+                {
+                    child.Text = cell.DisplayValue;
+                    child.Visibility = Visibility.Visible;
+                }
+            }
+        }
+
+        if (_activeCellEditBox != null && _activeCellEditBox.Tag as string == "EditBox")
+        {
+            _activeCellEditBox = null;
+        }
+        _justStartedInCellEdit = false;
+        
+        // Reset formula editing state
+        _isFormulaEditing = false;
+        if (_isPickingFormulaReference)
+        {
+            ResetFormulaReferenceTracking();
+        }
+        _isPickingFormulaReference = false;
+        _formulaEditTargetCell = null;
+        SetFormulaEditorHitTest(true);
+        UpdateParameterHintDismissBehavior();
+        
+        // Rebuild grid to update all cells
+        if (ViewModel.SelectedSheet != null)
+        {
+            BuildSpreadsheetGrid(ViewModel.SelectedSheet);
+        }
+
+        // After committing, restore selection to the edited cell only
+        ClearSelectionSet();
+        AddToSelection(cell);
+        _selectedCell = cell;
+        _selectedButton = GetButtonForCell(cell) ?? button;
+        UpdateSelectionVisuals();
+        UpdateSelectionSummary();
+    }
+
+    private void CancelInCellEdit(CellViewModel cell, Button button)
+    {
+        DebugLog($"CancelInCellEdit: {cell.Address}");
+        
+        // Remove edit box and restore display without saving
+        if (button.Content is Grid grid)
+        {
+            var editBox = grid.Children.OfType<TextBox>().FirstOrDefault(tb => "EditBox".Equals(tb.Tag));
+            if (editBox != null)
+            {
+                grid.Children.Remove(editBox);
+            }
+            
+            foreach (var child in grid.Children.OfType<TextBlock>())
+            {
+                if ("DisplayText".Equals(child.Tag))
+                {
+                    child.Visibility = Visibility.Visible;
+                }
+            }
+        }
+        
+        _activeCellEditBox = null;
+        _justStartedInCellEdit = false;
+        
+        _isFormulaEditing = false;
+        if (_isPickingFormulaReference)
+        {
+            ResetFormulaReferenceTracking();
+        }
+        _isPickingFormulaReference = false;
+        _formulaEditTargetCell = null;
+        UpdateParameterHintDismissBehavior();
+        SetFormulaEditorHitTest(true);
+
+        // Ensure selection snaps back to the original cell
+        ClearSelectionSet();
+        AddToSelection(cell);
+        _selectedCell = cell;
+        _selectedButton = button;
+        UpdateSelectionVisuals();
+        UpdateSelectionSummary();
+    }
+
     private void CellEditBox_LostFocus(object sender, RoutedEventArgs e)
     {
+        DebugLog($"LOSTFOCUS: CellEditBox lost focus, _isFormulaEditing={_isFormulaEditing}, _isPickingFormulaReference={_isPickingFormulaReference}, _isClickingCellForReference={_isClickingCellForReference}, flyoutOpen={FunctionAutocompleteFlyout.IsOpen}");
+        
+        // CRITICAL FIX: When picking formula references, don't commit but keep edit box visible
+        // The edit box will be hidden by PointerEntered when user hovers over a cell
+        if (_isPickingFormulaReference)
+        {
+            DebugLog("LOSTFOCUS: In formula picking mode, NOT committing (edit box stays visible)");
+            return;
+        }
+        
         // Don't commit if flyout is open - user is still editing the formula
         if (FunctionAutocompleteFlyout.IsOpen || _suppressCommitOnFlyoutOpen)
         {
+            DebugLog("LOSTFOCUS: Flyout is open, not committing");
             System.Diagnostics.Debug.WriteLine("CellEditBox_LostFocus: Flyout is open, not committing");
             return;
         }
@@ -1782,6 +2215,7 @@ public sealed partial class MainWindow : Page
         // Don't commit if we're navigating between cells (Tab key)
         if (!_isNavigatingBetweenCells)
         {
+            DebugLog("LOSTFOCUS: Calling CommitCellEdit");
             CommitCellEdit();
         }
     }
@@ -1811,6 +2245,8 @@ public sealed partial class MainWindow : Page
 
     private void CellEditBox_GotFocus(object sender, RoutedEventArgs e)
     {
+        DebugLog($"GOTFOCUS: CellEditBox got focus, _isNavigatingBetweenCells={_isNavigatingBetweenCells}");
+        
         if (_isNavigatingBetweenCells)
         {
             _isNavigatingBetweenCells = false;
@@ -2063,15 +2499,41 @@ public sealed partial class MainWindow : Page
 
     private void CommitCellEdit()
     {
+        DebugLog($"COMMIT: CommitCellEdit called, _isFormulaEditing={_isFormulaEditing}, _isPickingFormulaReference={_isPickingFormulaReference}");
+        
+        // Don't commit if we're in the middle of picking formula references
+        if (_isPickingFormulaReference)
+        {
+            DebugLog("COMMIT: In formula picking mode, ignoring commit request");
+            return;
+        }
+        
+        // Ensure edit box is visible and hit-testable
+        CellEditBox.Visibility = Visibility.Visible;
+        CellEditBox.IsHitTestVisible = true;
+        
         if (CellEditBox.Tag is CellViewModel cell)
         {
+            DebugLog($"COMMIT: Committing cell {cell.Address}, value='{CellEditBox.Text}'");
             cell.RawValue = CellEditBox.Text;
             
             // Only close edit box and refresh if not navigating between cells
             if (!_isNavigatingBetweenCells)
             {
+                DebugLog("COMMIT: Closing edit box and rebuilding grid");
                 CellEditBox.Visibility = Visibility.Collapsed;
                 CellEditBox.Tag = null;
+                
+                // Reset formula editing state
+                _isFormulaEditing = false;
+                if (_isPickingFormulaReference)
+                {
+                    ResetFormulaReferenceTracking();
+                }
+                _isPickingFormulaReference = false;
+                SetFormulaEditorHitTest(true);
+                UpdateParameterHintDismissBehavior();
+                DebugLog("COMMIT: Formula editing state reset");
                 
                 if (ViewModel.SelectedSheet != null)
                 {
@@ -2347,9 +2809,21 @@ public sealed partial class MainWindow : Page
 
     private void ShowFormulaIntellisense()
     {
-        // Use CellEditBox text for filtering since that's what user is typing into
-        var text = CellEditBox.Visibility == Visibility.Visible ? CellEditBox.Text : CellFormulaBox.Text;
-        System.Diagnostics.Debug.WriteLine($"ShowFormulaIntellisense: Called with text='{text}', CellEditBox.Visibility={CellEditBox.Visibility}, CellEditBox.Text='{CellEditBox.Text}', CellFormulaBox.Text='{CellFormulaBox.Text}'");
+        // Use the active in-cell editor text when available
+        string text;
+        if (_activeCellEditBox != null)
+        {
+            text = _activeCellEditBox.Text;
+        }
+        else if (CellEditBox.Visibility == Visibility.Visible)
+        {
+            text = CellEditBox.Text;
+        }
+        else
+        {
+            text = CellFormulaBox.Text;
+        }
+        System.Diagnostics.Debug.WriteLine($"ShowFormulaIntellisense: Called with text='{text}', activeEditor={_activeCellEditBox != null}");
         
         if (string.IsNullOrWhiteSpace(text) || !text.StartsWith("="))
         {
@@ -2369,12 +2843,24 @@ public sealed partial class MainWindow : Page
             // Already has opening paren, enable reference picking mode
             FunctionAutocompletePopup.IsOpen = false;
             FunctionAutocompleteFlyout.Hide();
+            if (!_isPickingFormulaReference)
+            {
+                ResetFormulaReferenceTracking();
+            }
             _isPickingFormulaReference = true;
+            SetFormulaEditorHitTest(false);
+            UpdateParameterHintDismissBehavior();
             return;
         }
         
         // Not in reference picking mode while typing function name
+        if (_isPickingFormulaReference)
+        {
+            ResetFormulaReferenceTracking();
+        }
         _isPickingFormulaReference = false;
+        SetFormulaEditorHitTest(true);
+        UpdateParameterHintDismissBehavior();
         
         // Filter suggestions based on what's been typed and current context
         var searchText = formulaText.ToUpperInvariant();
@@ -2420,19 +2906,18 @@ public sealed partial class MainWindow : Page
                 FunctionAutocompletePopup.XamlRoot = CellFormulaBox.XamlRoot;
             }
             
-            // Try to show the flyout on CellEditBox
-            if (CellEditBox.Visibility == Visibility.Visible)
+            // Try to show the flyout on the active editor
+            var flyoutTarget = (FrameworkElement?)_activeCellEditBox ?? CellEditBox;
+            if (flyoutTarget != null)
             {
                 try
                 {
-                    // Ensure edit box has focus BEFORE showing flyout
-                    CellEditBox.Focus(FocusState.Keyboard);
-                    
-                    FunctionAutocompleteFlyout.ShowAt(CellEditBox);
-                    System.Diagnostics.Debug.WriteLine("ShowFormulaIntellisense: Flyout shown at CellEditBox");
-                    
-                    // Keep focus on CellEditBox immediately
-                    CellEditBox.Focus(FocusState.Keyboard);
+                    FunctionAutocompleteFlyout.ShowAt(flyoutTarget);
+                    System.Diagnostics.Debug.WriteLine("ShowFormulaIntellisense: Flyout shown at active editor");
+                    DispatcherQueue?.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+                    {
+                        flyoutTarget.Focus(FocusState.Keyboard);
+                    });
                 }
                 catch (Exception ex)
                 {
@@ -2440,23 +2925,22 @@ public sealed partial class MainWindow : Page
                 }
             }
             
-            // Position popup near the CellEditBox (where user is typing)
+            // Position popup near the active editor (where user is typing)
             try
             {
                 // Close first to reset state
                 FunctionAutocompletePopup.IsOpen = false;
                 
-                if (CellEditBox.Visibility == Visibility.Visible)
+                if (_activeCellEditBox != null)
                 {
-                    // Position below the cell edit box
-                    var transform = CellEditBox.TransformToVisual(null);
-                    var point = transform.TransformPoint(new Windows.Foundation.Point(0, CellEditBox.ActualHeight));
+                    var transform = _activeCellEditBox.TransformToVisual(null);
+                    var point = transform.TransformPoint(new Windows.Foundation.Point(0, _activeCellEditBox.ActualHeight));
                     FunctionAutocompletePopup.HorizontalOffset = point.X;
                     FunctionAutocompletePopup.VerticalOffset = point.Y + 4;
                 }
-                else
+                else if (CellEditBox.Visibility == Visibility.Visible)
                 {
-                    // Fallback to formula box
+                    // Fallback to legacy edit box if present
                     var transform = CellFormulaBox.TransformToVisual(null);
                     var point = transform.TransformPoint(new Windows.Foundation.Point(0, CellFormulaBox.ActualHeight));
                     FunctionAutocompletePopup.HorizontalOffset = point.X;
@@ -2464,6 +2948,10 @@ public sealed partial class MainWindow : Page
                 }
                 
                 FunctionAutocompletePopup.IsOpen = true;
+                DispatcherQueue?.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+                {
+                    _activeCellEditBox?.Focus(FocusState.Keyboard);
+                });
                 System.Diagnostics.Debug.WriteLine($"ShowFormulaIntellisense: Showing {matchingSuggestions.Count} suggestions, Popup IsOpen={FunctionAutocompletePopup.IsOpen}");
             }
             catch (Exception ex)
@@ -2476,7 +2964,6 @@ public sealed partial class MainWindow : Page
             System.Diagnostics.Debug.WriteLine("ShowFormulaIntellisense: No suggestions, closing all");
             FunctionAutocompletePopup.IsOpen = false;
             FunctionAutocompleteFlyout.Hide();
-            VisibleFunctionList.Visibility = Visibility.Collapsed;
             VisibleFunctionList.Visibility = Visibility.Collapsed;
         }
     }
@@ -2537,6 +3024,12 @@ public sealed partial class MainWindow : Page
     private void UpdateParameterHints()
     {
         if (!_isFormulaEditing)
+        {
+            ParameterHintPopup.IsOpen = false;
+            return;
+        }
+
+        if (_isPickingFormulaReference)
         {
             ParameterHintPopup.IsOpen = false;
             return;
@@ -2723,8 +3216,20 @@ public sealed partial class MainWindow : Page
         {
             DispatcherQueue?.TryEnqueue(() =>
             {
-                _isPickingFormulaReference = false;
-                CellFormulaBox.Focus(FocusState.Programmatic);
+                if (_activeCellEditBox != null)
+                {
+                    _activeCellEditBox.Focus(FocusState.Keyboard);
+                    _activeCellEditBox.SelectionStart = _activeCellEditBox.Text.Length;
+                }
+                else if (CellEditBox.Visibility == Visibility.Visible)
+                {
+                    CellEditBox.Focus(FocusState.Keyboard);
+                    CellEditBox.SelectionStart = CellEditBox.Text.Length;
+                }
+                else
+                {
+                    CellFormulaBox.Focus(FocusState.Programmatic);
+                }
             });
             return;
         }
@@ -2737,6 +3242,88 @@ public sealed partial class MainWindow : Page
         _formulaEditTargetCell = null;
         ParameterHintPopup.IsOpen = false;
         ClearFormulaHighlights();
+        SetFormulaEditorHitTest(true);
+        UpdateParameterHintDismissBehavior();
+    }
+
+    private TextBox? GetActiveFormulaEditor(out string currentText, out int caret)
+    {
+        if (_activeCellEditBox != null)
+        {
+            currentText = _activeCellEditBox.Text ?? string.Empty;
+            caret = _activeCellEditBox.SelectionStart;
+            return _activeCellEditBox;
+        }
+
+        if (CellEditBox.Visibility == Visibility.Visible && ReferenceEquals(CellEditBox.Tag, _formulaEditTargetCell))
+        {
+            currentText = CellEditBox.Text ?? string.Empty;
+            caret = CellEditBox.SelectionStart;
+            return CellEditBox;
+        }
+
+        currentText = CellFormulaBox.Text ?? string.Empty;
+        caret = CellFormulaBox.SelectionStart;
+        return null;
+    }
+
+    private void UpdateFormulaEditorText(TextBox? activeEditor, string updatedText, int selectionStart)
+    {
+        selectionStart = Math.Clamp(selectionStart, 0, updatedText.Length);
+
+        _updatingFormulaText = true;
+        try
+        {
+            CellFormulaBox.Text = updatedText;
+            if (activeEditor != null)
+            {
+                activeEditor.Text = updatedText;
+            }
+        }
+        finally
+        {
+            _updatingFormulaText = false;
+        }
+
+        CellFormulaBox.SelectionStart = selectionStart;
+        CellFormulaBox.SelectionLength = 0;
+
+        if (activeEditor != null)
+        {
+            activeEditor.SelectionStart = selectionStart;
+            activeEditor.SelectionLength = 0;
+        }
+
+        if (_formulaEditTargetCell != null)
+        {
+            _formulaEditTargetCell.Formula = updatedText;
+        }
+
+        if (_selectedCell != null && _selectedCell != _formulaEditTargetCell)
+        {
+            _selectedCell.Formula = updatedText;
+        }
+    }
+
+    private void RestoreFormulaEditorFocus(TextBox? activeEditor, int selectionStart)
+    {
+        if (activeEditor != null)
+        {
+            var editorToFocus = activeEditor;
+            DispatcherQueue?.TryEnqueue(() =>
+            {
+                editorToFocus.Focus(FocusState.Keyboard);
+                editorToFocus.SelectionStart = Math.Clamp(selectionStart, 0, editorToFocus.Text?.Length ?? 0);
+            });
+        }
+        else
+        {
+            DispatcherQueue?.TryEnqueue(() =>
+            {
+                CellFormulaBox.Focus(FocusState.Keyboard);
+                CellFormulaBox.SelectionStart = Math.Clamp(selectionStart, 0, CellFormulaBox.Text?.Length ?? 0);
+            });
+        }
     }
 
     private void InsertCellReferenceIntoFormula(CellViewModel cell)
@@ -2746,31 +3333,173 @@ public sealed partial class MainWindow : Page
             return;
         }
 
-        var text = CellFormulaBox.Text ?? string.Empty;
-        var caret = CellFormulaBox.SelectionStart;
+        DebugLog($"INSERT_REF: Adding reference {cell.Address} while editing {_formulaEditTargetCell.Address}");
+
+        var activeEditor = GetActiveFormulaEditor(out var currentText, out var caret);
+        caret = Math.Clamp(caret, 0, currentText.Length);
+        var insertStart = caret;
+
         var reference = BuildCellReferenceString(cell, _formulaEditTargetCell);
 
-        if (caret > 0 && caret <= text.Length)
+        if (caret > 0 && caret <= currentText.Length)
         {
-            var previous = text[caret - 1];
+            var previous = currentText[caret - 1];
             if (previous != '(' && previous != ',' && previous != '=')
             {
                 reference = "," + reference;
             }
         }
 
-        CellFormulaBox.Text = text.Insert(caret, reference);
-        CellFormulaBox.SelectionStart = caret + reference.Length;
-        _selectedCell!.Formula = CellFormulaBox.Text;
+        var updatedText = currentText.Insert(caret, reference);
+
+        UpdateFormulaEditorText(activeEditor, updatedText, insertStart + reference.Length);
+
+        _formulaReferenceAnchor = cell;
+        _formulaReferenceInsertStart = insertStart;
+        _formulaReferenceInsertLength = reference.Length;
+        _formulaReferenceHasLeadingSeparator = reference.StartsWith(",", StringComparison.Ordinal);
+
+        _isClickingCellForReference = false;
+
+        _activeFormulaRangeHighlights.Clear();
         HighlightFormulaCell(cell);
+        _activeFormulaRangeHighlights.Add(cell);
         UpdateParameterHints();
-        // Stay in picking mode - user may want to select more cells
-        DispatcherQueue?.TryEnqueue(() => CellFormulaBox.Focus(FocusState.Programmatic));
+
+        RestoreFormulaEditorFocus(activeEditor, insertStart + reference.Length);
+
+        // Visually mark the referenced cell selected on first click
+        if (_formulaEditTargetCell != null)
+        {
+            if (_multiSelection.Count == 0)
+            {
+                AddToSelection(_formulaEditTargetCell);
+            }
+            else if (!_multiSelection.Contains(_formulaEditTargetCell))
+            {
+                ClearSelectionSet();
+                AddToSelection(_formulaEditTargetCell);
+            }
+
+            if (!_multiSelection.Contains(cell))
+            {
+                AddToSelection(cell);
+            }
+
+            _selectedCell = _formulaEditTargetCell;
+            _selectedButton = GetButtonForCell(_selectedCell);
+            UpdateSelectionVisuals();
+            UpdateSelectionSummary();
+        }
+    }
+
+    private void ExtendFormulaReferenceRange(CellViewModel cell)
+    {
+        if (_formulaEditTargetCell == null || _formulaReferenceAnchor == null)
+        {
+            InsertCellReferenceIntoFormula(cell);
+            return;
+        }
+
+        if (_formulaReferenceAnchor.Sheet == null || cell.Sheet == null || _formulaReferenceAnchor.Sheet != cell.Sheet)
+        {
+            InsertCellReferenceIntoFormula(cell);
+            return;
+        }
+
+        DebugLog($"INSERT_REF: Extending reference from {_formulaReferenceAnchor.Address} to {cell.Address}");
+
+        var activeEditor = GetActiveFormulaEditor(out var currentText, out _);
+        var insertStart = Math.Clamp(_formulaReferenceInsertStart, 0, currentText.Length);
+        var existingLength = Math.Clamp(_formulaReferenceInsertLength, 0, currentText.Length - insertStart);
+
+        if (existingLength == 0)
+        {
+            InsertCellReferenceIntoFormula(cell);
+            return;
+        }
+
+        var replacementCore = BuildCellRangeReferenceString(_formulaReferenceAnchor, cell, _formulaEditTargetCell);
+        var replacement = (_formulaReferenceHasLeadingSeparator ? "," : string.Empty) + replacementCore;
+
+        var updatedText = currentText.Substring(0, insertStart) + replacement;
+        if (insertStart + existingLength < currentText.Length)
+        {
+            updatedText += currentText.Substring(insertStart + existingLength);
+        }
+
+        _formulaReferenceInsertStart = insertStart;
+        _formulaReferenceInsertLength = replacement.Length;
+        _formulaReferenceHasLeadingSeparator = replacement.StartsWith(",", StringComparison.Ordinal);
+
+        UpdateFormulaEditorText(activeEditor, updatedText, insertStart + replacement.Length);
+
+        _isClickingCellForReference = false;
+
+        RemoveActiveFormulaRangeHighlights();
+        var rangeCells = HighlightFormulaRange(_formulaReferenceAnchor, cell);
+        _activeFormulaRangeHighlights.Clear();
+        _activeFormulaRangeHighlights.AddRange(rangeCells);
+        UpdateParameterHints();
+
+        RestoreFormulaEditorFocus(activeEditor, insertStart + replacement.Length);
+
+        if (_formulaEditTargetCell != null)
+        {
+            SelectRange(_formulaReferenceAnchor, cell);
+            if (!_multiSelection.Contains(_formulaEditTargetCell))
+            {
+                AddToSelection(_formulaEditTargetCell);
+            }
+
+            _selectedCell = _formulaEditTargetCell;
+            _selectionAnchor = _formulaReferenceAnchor;
+            _selectedButton = GetButtonForCell(_selectedCell);
+            UpdateSelectionVisuals();
+            UpdateSelectionSummary();
+        }
     }
 
     private void CellButton_PointerPressed(object sender, PointerRoutedEventArgs e)
     {
-        // Pointer handler for future use - picking state now managed by formula content
+        if (sender is Button btn && btn.Tag is CellViewModel cell)
+        {
+            DebugLog($"POINTER: Cell {cell.Address} pointer pressed, _isFormulaEditing={_isFormulaEditing}, _isPickingFormulaReference={_isPickingFormulaReference}");
+            
+            // Handle cell selection during formula reference picking
+            if (_isPickingFormulaReference)
+            {
+                _isClickingCellForReference = true;
+                DebugLog("POINTER: Set _isClickingCellForReference = true, calling SelectCell");
+                
+                // Call SelectCell directly since Click event won't fire when IsHitTestVisible=false
+                SelectCell(cell, btn);
+                
+                // Mark event as handled to prevent it from bubbling
+                e.Handled = true;
+            }
+        }
+    }
+
+    private void SpreadsheetGrid_PointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        // When picking formula references and user moves mouse over grid, hide the edit box
+        // so they can click on cells. The edit box will reappear when they select a cell.
+        if (_isPickingFormulaReference && CellEditBox.Visibility == Visibility.Visible)
+        {
+            var point = e.GetCurrentPoint(SpreadsheetGrid);
+            // Only hide if mouse is actually over a cell button
+            var element = VisualTreeHelper.FindElementsInHostCoordinates(
+                point.Position, 
+                SpreadsheetGrid
+            ).FirstOrDefault(el => el is Button btn && btn.Tag is CellViewModel);
+            
+            if (element != null)
+            {
+                DebugLog("POINTERMOVE: Mouse over cell during picking mode, hiding edit box");
+                CellEditBox.Visibility = Visibility.Collapsed;
+            }
+        }
     }
 
     private static string BuildCellReferenceString(CellViewModel cell, CellViewModel target)
@@ -2782,6 +3511,45 @@ public sealed partial class MainWindow : Page
         }
 
         return cell.Address.ToString();
+    }
+
+    private static string BuildCellRangeReferenceString(CellViewModel start, CellViewModel end, CellViewModel target)
+    {
+        if (start.Sheet == null || end.Sheet == null)
+        {
+            return BuildCellReferenceString(end, target);
+        }
+
+        if (!ReferenceEquals(start.Sheet, end.Sheet))
+        {
+            return BuildCellReferenceString(end, target);
+        }
+
+        var sheet = start.Sheet;
+        var minRow = Math.Min(start.Row, end.Row);
+        var maxRow = Math.Max(start.Row, end.Row);
+        var minCol = Math.Min(start.Column, end.Column);
+        var maxCol = Math.Max(start.Column, end.Column);
+
+        var startLabel = $"{CellAddress.ColumnIndexToName(minCol)}{minRow + 1}";
+        var endLabel = $"{CellAddress.ColumnIndexToName(maxCol)}{maxRow + 1}";
+
+        if (startLabel == endLabel)
+        {
+            if (ReferenceEquals(sheet, target.Sheet))
+            {
+                return startLabel;
+            }
+
+            return $"{sheet.Name}!{startLabel}";
+        }
+
+        if (ReferenceEquals(sheet, target.Sheet))
+        {
+            return $"{startLabel}:{endLabel}";
+        }
+
+        return $"{sheet.Name}!{startLabel}:{sheet.Name}!{endLabel}";
     }
 
     private void HighlightFormulaCell(CellViewModel cell)
@@ -2800,6 +3568,74 @@ public sealed partial class MainWindow : Page
         }
     }
 
+    private void RemoveActiveFormulaRangeHighlights()
+    {
+        if (_activeFormulaRangeHighlights.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var cell in _activeFormulaRangeHighlights.ToList())
+        {
+            var index = _formulaHighlights.FindIndex(h => ReferenceEquals(h.Cell, cell));
+            if (index >= 0)
+            {
+                var (highlightCell, previousState) = _formulaHighlights[index];
+                highlightCell.VisualState = previousState;
+                var button = GetButtonForCell(highlightCell);
+                if (button != null)
+                {
+                    ApplyCellStyling(button, highlightCell);
+                }
+
+                _formulaHighlights.RemoveAt(index);
+            }
+        }
+
+        _activeFormulaRangeHighlights.Clear();
+    }
+
+    private List<CellViewModel> HighlightFormulaRange(CellViewModel start, CellViewModel end)
+    {
+        var collected = new List<CellViewModel>();
+
+        if (start.Sheet != end.Sheet || start.Sheet == null)
+        {
+            HighlightFormulaCell(start);
+            HighlightFormulaCell(end);
+            collected.Add(start);
+            if (!ReferenceEquals(start, end))
+            {
+                collected.Add(end);
+            }
+            return collected;
+        }
+
+        var sheet = start.Sheet;
+        var minRow = Math.Min(start.Row, end.Row);
+        var maxRow = Math.Max(start.Row, end.Row);
+        var minCol = Math.Min(start.Column, end.Column);
+        var maxCol = Math.Max(start.Column, end.Column);
+
+        for (int r = minRow; r <= maxRow; r++)
+        {
+            for (int c = minCol; c <= maxCol; c++)
+            {
+                var cellVm = sheet.GetCell(r, c);
+                if (cellVm != null)
+                {
+                    HighlightFormulaCell(cellVm);
+                    if (!collected.Contains(cellVm))
+                    {
+                        collected.Add(cellVm);
+                    }
+                }
+            }
+        }
+
+        return collected;
+    }
+
     private void ClearFormulaHighlights()
     {
         foreach (var (cell, previous) in _formulaHighlights)
@@ -2813,48 +3649,82 @@ public sealed partial class MainWindow : Page
         }
 
         _formulaHighlights.Clear();
+        _activeFormulaRangeHighlights.Clear();
     }
 
     private void InsertFunctionSuggestion(FunctionSuggestion suggestion)
     {
+        DebugLog($"INSERT_FUNC: Inserting function {suggestion.Name}");
+        
         var newFormula = $"={suggestion.Name}()";
         
-        // Update both edit boxes and the cell
+        _isFormulaEditing = true;
+        if (_selectedCell != null)
+        {
+            _formulaEditTargetCell = _selectedCell;
+        }
+        
+        // Update both edit boxes - but DON'T save to cell yet!
+        // User needs to complete the formula by selecting cell references
         _updatingFormulaText = true;
         try
         {
             CellFormulaBox.Text = newFormula;
-            CellEditBox.Text = newFormula;
-            
-            if (_formulaEditTargetCell != null)
+            if (_activeCellEditBox != null)
             {
-                _formulaEditTargetCell.Formula = newFormula;
-                _formulaEditTargetCell.RawValue = newFormula;
+                _activeCellEditBox.Text = newFormula;
             }
+            else
+            {
+                CellEditBox.Text = newFormula;
+            }
+            
+            // DO NOT save to cell yet - user is still building the formula
+            // The formula will be saved when they commit (press Enter or click away)
         }
         finally
         {
             _updatingFormulaText = false;
         }
         
-        // Place caret inside parentheses in both boxes
+        // Place caret inside parentheses in both editors
         var caretPos = newFormula.Length - 1;
         CellFormulaBox.SelectionStart = caretPos;
-        CellEditBox.SelectionStart = caretPos;
+        if (_activeCellEditBox != null)
+        {
+            _activeCellEditBox.SelectionStart = caretPos;
+        }
+        else
+        {
+            CellEditBox.SelectionStart = caretPos;
+        }
         
         FunctionAutocompletePopup.IsOpen = false;
         VisibleFunctionList.Visibility = Visibility.Collapsed;
         
+        DebugLog("INSERT_FUNC: Hiding flyout and setting up focus");
+        
+        // Enable reference picking NOW before any focus changes
+        if (!_isPickingFormulaReference)
+        {
+            ResetFormulaReferenceTracking();
+        }
+        _isPickingFormulaReference = true;
+        DebugLog($"INSERT_FUNC: Set _isPickingFormulaReference = true");
+        SetFormulaEditorHitTest(false);
+        UpdateParameterHintDismissBehavior();
+        
         // Keep commit suppressed while we hide the flyout and refocus
         _suppressCommitOnFlyoutOpen = true;
-        // Hide flyout and return focus to the edit box asynchronously
+        // Hide flyout
         FunctionAutocompleteFlyout.Hide();
         DispatcherQueue?.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
         {
-            if (CellEditBox.Visibility == Visibility.Visible)
+            DebugLog($"INSERT_FUNC: Refocusing, suppressCommit will be reset");
+            if (_activeCellEditBox != null)
             {
-                CellEditBox.Focus(FocusState.Keyboard);
-                CellEditBox.SelectionStart = caretPos;
+                _activeCellEditBox.Focus(FocusState.Keyboard);
+                _activeCellEditBox.SelectionStart = caretPos;
             }
             else
             {
@@ -2863,10 +3733,8 @@ public sealed partial class MainWindow : Page
             }
             // Allow commit again
             _suppressCommitOnFlyoutOpen = false;
+            DebugLog($"INSERT_FUNC: suppressCommit reset to false");
         });
-        
-        // Now enable reference picking since we have the opening paren
-        _isPickingFormulaReference = true;
     }
 
     private void LeftSplitter_PointerPressed(object sender, PointerRoutedEventArgs e)
@@ -3349,9 +4217,21 @@ public sealed partial class MainWindow : Page
         {
             if (_selectedCell != null && _selectedButton != null)
             {
+                // Check if cell is already being edited (has TextBox in it)
+                if (_selectedButton.Content is Grid grid)
+                {
+                    var existingEditBox = grid.Children.OfType<TextBox>().FirstOrDefault(tb => "EditBox".Equals(tb.Tag));
+                    if (existingEditBox != null)
+                    {
+                        // Already editing - let the TextBox handle the keystroke
+                        // DO NOT set e.Handled = true so the event reaches the TextBox
+                        return;
+                    }
+                }
+                
                 var charToAdd = VirtualKeyToString(e.Key);
                 System.Diagnostics.Debug.WriteLine($"MainWindow_KeyDown: Key {e.Key} mapped to '{charToAdd}'");
-                StartDirectEdit(_selectedCell, _selectedButton, charToAdd);
+                StartInCellEdit(_selectedCell, _selectedButton, charToAdd);
                 e.Handled = true;
                 return;
             }

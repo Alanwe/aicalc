@@ -214,7 +214,7 @@
                                   Background="{ThemeResource AppBackgroundBrush}"
                                   SizeChanged="SpreadsheetScrollViewer_SizeChanged">
                         <Grid>
-                            <Grid x:Name="SpreadsheetGrid" Margin="12"/>
+                            <Grid x:Name="SpreadsheetGrid" Margin="12" PointerMoved="SpreadsheetGrid_PointerMoved"/>
                             <TextBox x:Name="CellEditBox"
                                      Visibility="Collapsed"
                                      Background="{ThemeResource CardBackgroundBrush}"
