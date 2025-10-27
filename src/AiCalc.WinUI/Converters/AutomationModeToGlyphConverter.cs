@@ -12,8 +12,9 @@ public class AutomationModeToGlyphConverter : IValueConverter
         {
             return mode switch
             {
-                CellAutomationMode.AutoOnOpen => "",
-                CellAutomationMode.AutoOnDependencyChange => "",
+                CellAutomationMode.OnEdit => "",
+                CellAutomationMode.OnOpen => "",
+                CellAutomationMode.Continuous => "",
                 _ => ""
             };
         }

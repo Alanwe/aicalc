@@ -357,7 +357,12 @@
                                          AcceptsReturn="True" 
                                          Height="70" 
                                          TextWrapping="Wrap"
-                                         TextChanged="CellValue_Changed" />
+                                         TextChanged="CellValue_Changed"
+                                         KeyDown="CellValueBox_KeyDown" />
+                                <Button x:Name="CellValueApplyButton"
+                                        Content="Update"
+                                        HorizontalAlignment="Left"
+                                        Click="CellValueApply_Click" />
                             </StackPanel>
                             
                             <StackPanel Spacing="6">
@@ -371,7 +376,6 @@
                                 </StackPanel>
                                 <Grid>
                                     <TextBox x:Name="CellFormulaBox" 
-                                             PlaceholderText="=SUM(A1,A2)"
                                              Height="40"
                                              TextChanged="CellFormula_Changed"
                             GotFocus="CellFormulaBox_GotFocus"
@@ -492,7 +496,7 @@
                             </Border>
                             
                             <StackPanel Spacing="6">
-                                <TextBlock Text="Automation" Foreground="{ThemeResource TextPrimaryBrush}" FontSize="13" FontWeight="SemiBold" />
+                                <TextBlock Text="Refresh" Foreground="{ThemeResource TextPrimaryBrush}" FontSize="13" FontWeight="SemiBold" />
                                 <ComboBox x:Name="AutomationModeBox"
                                           HorizontalAlignment="Stretch"
                                           SelectionChanged="AutomationMode_Changed">
@@ -501,6 +505,14 @@
                                     <ComboBoxItem Content="OnLoad"/>
                                     <ComboBoxItem Content="Continuous"/>
                                 </ComboBox>
+                            </StackPanel>
+
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="Status" Foreground="{ThemeResource TextPrimaryBrush}" FontSize="13" FontWeight="SemiBold" />
+                                <TextBlock x:Name="CellStatusLabel"
+                                           Foreground="{ThemeResource TextSecondaryBrush}"
+                                           FontSize="12"
+                                           Text=""/>
                             </StackPanel>
                             
                             <Button Content="▶ Evaluate Cell" 

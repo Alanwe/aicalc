@@ -10,10 +10,12 @@ public class SheetViewModel
 {
     private readonly WorkbookViewModel _workbook;
     public const double DefaultColumnWidth = 120d;
+    public const double DefaultRowHeight = 26d;
     
     private readonly ObservableCollection<double> _columnWidths;
     private readonly ObservableCollection<bool> _columnVisibility;
     private readonly ObservableCollection<bool> _rowVisibility;
+    private readonly ObservableCollection<double> _rowHeights;
     
     // Freeze panes support (Phase 8)
     private int _frozenColumnCount = 0;
@@ -28,6 +30,7 @@ public class SheetViewModel
         _columnWidths = new ObservableCollection<double>(Enumerable.Repeat(DefaultColumnWidth, columns));
         _columnVisibility = new ObservableCollection<bool>(Enumerable.Repeat(true, columns));
         _rowVisibility = new ObservableCollection<bool>(Enumerable.Repeat(true, rows));
+        _rowHeights = new ObservableCollection<double>(Enumerable.Repeat(DefaultRowHeight, rows));
     }
 
     public WorkbookViewModel Workbook { get; }
@@ -45,6 +48,18 @@ public class SheetViewModel
     public int ColumnCount => Rows.FirstOrDefault()?.Cells.Count ?? 0;
 
     public ObservableCollection<double> ColumnWidths => _columnWidths;
+
+    public ObservableCollection<double> RowHeights => _rowHeights;
+
+    public void SetRowHeight(int index, double height)
+    {
+        if (index < 0 || index >= _rowHeights.Count)
+        {
+            return;
+        }
+
+        _rowHeights[index] = height;
+    }
 
     public IReadOnlyList<string> ColumnHeaders => Enumerable.Range(0, ColumnCount).Select(CellAddress.ColumnIndexToName).ToList();
 
@@ -250,6 +265,7 @@ public class SheetViewModel
             var newRow = CreateRow(Rows.Count, ColumnCount);
             Rows.Add(newRow);
             _rowVisibility.Add(true);
+            _rowHeights.Add(DefaultRowHeight);
         }
     }
 
@@ -276,6 +292,7 @@ public class SheetViewModel
         var newRow = CreateRow(index, ColumnCount);
         Rows.Insert(index, newRow);
         _rowVisibility.Insert(index, true);
+        _rowHeights.Insert(index, DefaultRowHeight);
         
         // Update row indices for all rows after the inserted row
         for (int r = index + 1; r < Rows.Count; r++)
@@ -292,6 +309,10 @@ public class SheetViewModel
         if (index < _rowVisibility.Count)
         {
             _rowVisibility.RemoveAt(index);
+        }
+        if (index < _rowHeights.Count)
+        {
+            _rowHeights.RemoveAt(index);
         }
         
         // Update row indices for all rows after the deleted row

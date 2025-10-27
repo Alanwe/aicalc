@@ -68,6 +68,25 @@ public class FunctionDescriptor
     public CellObjectType[] ApplicableTypes { get; }
 
     public Func<FunctionEvaluationContext, Task<FunctionExecutionResult>> Handler { get; }
+
+    /// <summary>
+    /// Describes the typical result or return value for this function.
+    /// </summary>
+    public string? ExpectedOutput { get; set; }
+
+    /// <summary>
+    /// Optional example formula that demonstrates how to use the function.
+    /// </summary>
+    public string? Example { get; set; }
+
+    /// <summary>
+    /// Indicates the primary cell type produced when the function succeeds.
+    /// </summary>
+    public CellObjectType? ResultType { get; set; }
+
+    public bool HasExample => !string.IsNullOrWhiteSpace(Example);
+
+    public bool HasExpectedOutput => !string.IsNullOrWhiteSpace(ExpectedOutput);
     
     /// <summary>
     /// Check if this function can accept the given cell types

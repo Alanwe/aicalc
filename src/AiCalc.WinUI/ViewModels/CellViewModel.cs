@@ -62,6 +62,9 @@ public partial class CellViewModel : ObservableObject
     
     [ObservableProperty]
     private bool _isStale;
+
+    [ObservableProperty]
+    private bool _isValueOverridden;
     
     public ObservableCollection<CellHistoryEntry> History => _history;
 
@@ -234,6 +237,8 @@ public partial class CellViewModel : ObservableObject
             Value = result.Value;
         }
 
+        IsValueOverridden = false;
+
         var historyReason = reason;
         if (!string.IsNullOrWhiteSpace(result.Diagnostics))
         {
@@ -329,6 +334,8 @@ public partial class CellViewModel : ObservableObject
             {
                 Value = newValue;
             }
+
+            IsValueOverridden = HasFormula;
 
             MarkAsUpdated();
         }
@@ -453,6 +460,15 @@ public partial class CellViewModel : ObservableObject
             AppendHistory(Value, Value, _formulaBeforeChange, value, "Formula edited");
             Sheet.UpdateCellDependencies(this);
             MarkAsStale();
+        }
+
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            IsValueOverridden = false;
+        }
+        else
+        {
+            IsValueOverridden = false;
         }
 
         _formulaBeforeChange = null;

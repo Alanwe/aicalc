@@ -16,6 +16,7 @@ using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
 using Windows.Foundation;
+using Windows.ApplicationModel.DataTransfer;
 using Windows.UI;
 using Windows.UI.Text;
 
@@ -72,8 +73,110 @@ public sealed partial class MainWindow : Page
     private int? _columnContextIndex;
     private int? _rowContextIndex;
     // Reduced default row height further (20% reduction from 32)
-    private const double DefaultRowHeight = 26;
-    private const double ColumnWidthScale = 0.84; // reduce cell width by 16%
+    private const double ColumnWidthScale = 0.924; // make default display width ~10% wider than previous scale
+    private const double MinColumnWidth = 60;
+    private const double MaxColumnWidth = 600;
+    private const double MinRowHeight = 18;
+    private const double MaxRowHeight = 240;
+    private bool _isColumnResizing;
+    private HeaderContext? _activeColumnHeader;
+    private double _columnResizeStartX;
+    private double _columnResizeInitialWidth;
+    private double _columnResizeInitialDisplayWidth;
+    private bool _isRowResizing;
+    private HeaderContext? _activeRowHeader;
+    private double _rowResizeStartY;
+    private double _rowResizeInitialHeight;
+
+    private sealed record TypeIndicatorStyle(string Label, Color Background, Color Foreground);
+
+    private static readonly IReadOnlyDictionary<CellObjectType, TypeIndicatorStyle> TypeIndicatorStyles = new Dictionary<CellObjectType, TypeIndicatorStyle>
+    {
+        [CellObjectType.Text] = new TypeIndicatorStyle("S", Color.FromArgb(0xFF, 0x00, 0x7A, 0xCC), Colors.White),
+        [CellObjectType.Number] = new TypeIndicatorStyle("N", Color.FromArgb(0xFF, 0xD1, 0x34, 0x38), Colors.White),
+        [CellObjectType.RichText] = new TypeIndicatorStyle("T", Color.FromArgb(0xFF, 0x21, 0xA3, 0x66), Colors.White),
+        [CellObjectType.Image] = new TypeIndicatorStyle("I", Color.FromArgb(0xFF, 0xFF, 0xC8, 0x3D), Colors.Black),
+        [CellObjectType.Video] = new TypeIndicatorStyle("V", Color.FromArgb(0xFF, 0x8F, 0x3F, 0xFB), Colors.White),
+        [CellObjectType.Table] = new TypeIndicatorStyle("A", Color.FromArgb(0xFF, 0xD9, 0x59, 0x00), Colors.White),
+        [CellObjectType.DateTime] = new TypeIndicatorStyle("D", Color.FromArgb(0xFF, 0x8B, 0x00, 0x00), Colors.White),
+        [CellObjectType.Json] = new TypeIndicatorStyle("J", Color.FromArgb(0xFF, 0x0B, 0x6A, 0x0B), Colors.White),
+        [CellObjectType.Xml] = new TypeIndicatorStyle("X", Color.FromArgb(0xFF, 0x2B, 0xB1, 0xF2), Colors.Black)
+    };
+
+    private static bool TryGetTypeIndicatorStyle(CellViewModel cellVm, out TypeIndicatorStyle? style)
+    {
+        var objectType = cellVm.Value.ObjectType;
+
+        if (objectType == CellObjectType.Empty)
+        {
+            style = null;
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(cellVm.DisplayValue))
+        {
+            style = null;
+            return false;
+        }
+
+        if (TypeIndicatorStyles.TryGetValue(objectType, out style))
+        {
+            return true;
+        }
+
+        var typeName = Enum.GetName(typeof(CellObjectType), objectType);
+        if (string.IsNullOrWhiteSpace(typeName))
+        {
+            style = null;
+            return false;
+        }
+
+        var fallbackColor = Application.Current.Resources.TryGetValue("AccentBrush", out var accentResource) && accentResource is SolidColorBrush accentBrush
+            ? accentBrush.Color
+            : Color.FromArgb(0xFF, 0x60, 0x6B, 0xE6);
+
+        var letter = char.ToUpperInvariant(typeName[0]).ToString();
+        style = new TypeIndicatorStyle(letter, fallbackColor, GetReadableForeground(fallbackColor));
+        return true;
+    }
+
+    private static Color GetReadableForeground(Color background)
+    {
+        var luminance = (0.299 * background.R) + (0.587 * background.G) + (0.114 * background.B);
+        return luminance > 186 ? Colors.Black : Colors.White;
+    }
+
+    private bool IsInspectorElement(object? element)
+    {
+        if (element == null)
+        {
+            return false;
+        }
+
+        if (ReferenceEquals(element, CellValueBox) ||
+            ReferenceEquals(element, CellFormulaBox) ||
+            ReferenceEquals(element, CellNotesBox) ||
+            ReferenceEquals(element, AutomationModeBox))
+        {
+            return true;
+        }
+
+        if (element is DependencyObject dep)
+        {
+            var current = dep;
+            while (current != null)
+            {
+                if (ReferenceEquals(current, CellInspectorPanel))
+                {
+                    return true;
+                }
+
+                current = VisualTreeHelper.GetParent(current);
+            }
+        }
+
+        return false;
+    }
 
     private void SetFormulaEditorHitTest(bool enabled)
     {
@@ -306,6 +409,24 @@ public sealed partial class MainWindow : Page
         };
     }
 
+    private static string GetCellStatus(CellViewModel cell)
+    {
+        if (cell.HasFormula && !string.IsNullOrWhiteSpace(cell.Formula))
+        {
+            return cell.IsValueOverridden ? "Overwritten" : "Calculated";
+        }
+
+        var hasRawValue = !string.IsNullOrWhiteSpace(cell.RawValue);
+        var hasDisplayValue = !string.IsNullOrWhiteSpace(cell.DisplayValue) && cell.Value.ObjectType != CellObjectType.Empty;
+
+        if (hasRawValue || hasDisplayValue)
+        {
+            return "Overwritten";
+        }
+
+        return "Empty";
+    }
+
     private Border CreateFunctionItem(FunctionDescriptor func)
     {
         var border = new Border
@@ -352,7 +473,29 @@ public sealed partial class MainWindow : Page
         }
 
         border.Child = stack;
+
+        ToolTipService.SetToolTip(border, "Click to view details");
+
+        border.Tapped += async (s, e) =>
+        {
+            e.Handled = true;
+            await ShowFunctionDetailsDialogAsync(func);
+        };
+
         return border;
+    }
+
+    private async Task ShowFunctionDetailsDialogAsync(FunctionDescriptor descriptor)
+    {
+        var dialog = new FunctionDetailsDialog(descriptor);
+
+        var root = XamlRoot ?? FunctionsPanel?.XamlRoot;
+        if (root is not null)
+        {
+            dialog.XamlRoot = root;
+        }
+
+        await dialog.ShowAsync();
     }
 
     private void FocusFunctionGroupForCellType(CellObjectType type)
@@ -650,7 +793,7 @@ public sealed partial class MainWindow : Page
         {
             // Calculate how many rows fit in the viewport (subtracting header and margins)
             double viewportHeight = SpreadsheetScrollViewer.ActualHeight - 48; // header + padding
-            int rowsVisible = Math.Max(5, (int)Math.Floor(viewportHeight / DefaultRowHeight));
+            int rowsVisible = Math.Max(5, (int)Math.Floor(viewportHeight / SheetViewModel.DefaultRowHeight));
             if (rowsVisible > visibleRows.Count)
             {
                 sheet.EnsureCapacity(rowsVisible + 2, sheet.ColumnCount);
@@ -688,9 +831,12 @@ public sealed partial class MainWindow : Page
 
         // Header row plus visible row slots
         SpreadsheetGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(32) });
-        foreach (var _ in visibleRows)
+        foreach (var rowIndex in visibleRows)
         {
-            SpreadsheetGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(DefaultRowHeight) });
+            var rowHeight = sheet.RowHeights.Count > rowIndex
+                ? sheet.RowHeights[rowIndex]
+                : SheetViewModel.DefaultRowHeight;
+            SpreadsheetGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(rowHeight) });
         }
 
         // Row header column plus visible column slots
@@ -745,9 +891,15 @@ public sealed partial class MainWindow : Page
                     FontSize = 12
                 }
             };
-            header.Tag = columnIndex;
+            var headerContext = new HeaderContext(columnIndex, position + 1);
+            header.Tag = headerContext;
             FlyoutBase.SetAttachedFlyout(header, Resources["ColumnHeaderMenu"] as MenuFlyout);
             header.RightTapped += ColumnHeader_RightTapped;
+            header.PointerPressed += ColumnHeader_PointerPressed;
+            header.PointerMoved += ColumnHeader_PointerMoved;
+            header.PointerReleased += ColumnHeader_PointerReleased;
+            header.PointerCaptureLost += ColumnHeader_PointerCaptureLost;
+            ToolTipService.SetToolTip(header, "Drag to resize column");
             AddCell(header, 0, position + 1);
         }
 
@@ -774,9 +926,15 @@ public sealed partial class MainWindow : Page
                     FontSize = 12
                 }
             };
-            rowHeader.Tag = rowIndex;
+            var rowContext = new HeaderContext(rowIndex, position + 1);
+            rowHeader.Tag = rowContext;
             FlyoutBase.SetAttachedFlyout(rowHeader, Resources["RowHeaderMenu"] as MenuFlyout);
             rowHeader.RightTapped += RowHeader_RightTapped;
+            rowHeader.PointerPressed += RowHeader_PointerPressed;
+            rowHeader.PointerMoved += RowHeader_PointerMoved;
+            rowHeader.PointerReleased += RowHeader_PointerReleased;
+            rowHeader.PointerCaptureLost += RowHeader_PointerCaptureLost;
+            ToolTipService.SetToolTip(rowHeader, "Drag to resize row");
             AddCell(rowHeader, position + 1, 0);
 
             for (int colPosition = 0; colPosition < visibleColumns.Count; colPosition++)
@@ -796,6 +954,76 @@ public sealed partial class MainWindow : Page
         RefreshSelectionReferences(sheet);
         UpdateSelectionVisuals();
         UpdateSelectionSummary();
+    }
+
+    private static Border CreateTypeIndicatorBadge()
+    {
+        var label = new TextBlock
+        {
+            Text = string.Empty,
+            FontSize = 8,
+            FontWeight = FontWeights.SemiBold,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            Foreground = new SolidColorBrush(Colors.White),
+            IsHitTestVisible = false
+        };
+
+        var badge = new Border
+        {
+            Tag = "TypeIndicator",
+            Width = 12,
+            Height = 10,
+            CornerRadius = new CornerRadius(2),
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(0, 0, -2, 0),
+            Background = new SolidColorBrush(Colors.Transparent),
+            BorderBrush = new SolidColorBrush(Colors.Transparent),
+            BorderThickness = new Thickness(0),
+            Child = label,
+            Padding = new Thickness(0),
+            Visibility = Visibility.Collapsed,
+            IsHitTestVisible = false
+        };
+
+        Canvas.SetZIndex(badge, 2);
+        return badge;
+    }
+
+    private static Border CreateManualOverrideBadge()
+    {
+        var label = new TextBlock
+        {
+            Text = "M",
+            FontSize = 8,
+            FontWeight = FontWeights.SemiBold,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            Foreground = new SolidColorBrush(Colors.White),
+            IsHitTestVisible = false
+        };
+
+        var badge = new Border
+        {
+            Tag = "ManualIndicator",
+            Width = 12,
+            Height = 10,
+            CornerRadius = new CornerRadius(2),
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(0, 10, -2, 0),
+            Background = new SolidColorBrush(Colors.Black),
+            BorderBrush = new SolidColorBrush(Colors.Transparent),
+            BorderThickness = new Thickness(0),
+            Child = label,
+            Padding = new Thickness(0),
+            Visibility = Visibility.Collapsed,
+            IsHitTestVisible = false
+        };
+
+        Canvas.SetZIndex(badge, 1);
+        return badge;
     }
 
     private Button CreateCellButton(CellViewModel cellVm)
@@ -844,6 +1072,15 @@ public sealed partial class MainWindow : Page
             Tag = "DisplayText"
         };
         
+        grid.Children.Add(valueText);
+        Canvas.SetZIndex(valueText, 0);
+
+        var typeIndicator = CreateTypeIndicatorBadge();
+        grid.Children.Add(typeIndicator);
+
+        var manualIndicator = CreateManualOverrideBadge();
+        grid.Children.Add(manualIndicator);
+
         // Add a border overlay for formula selection highlighting (initially hidden)
         var selectionBorder = new Border
         {
@@ -852,8 +1089,8 @@ public sealed partial class MainWindow : Page
             IsHitTestVisible = false,
             Tag = "FormulaSelectionBorder"
         };
-        
-        grid.Children.Add(valueText);
+        Canvas.SetZIndex(selectionBorder, 1);
+
         grid.Children.Add(selectionBorder); // Add as overlay
         
         button.Content = grid;
@@ -882,6 +1119,38 @@ public sealed partial class MainWindow : Page
         button.RightTapped += (s, e) => SelectCell(cellVm, button);
         
         return button;
+    }
+
+    private void UpdateTypeIndicator(CellViewModel cellVm, Border indicator)
+    {
+        if (!TryGetTypeIndicatorStyle(cellVm, out var style) || style is null)
+        {
+            indicator.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        indicator.Visibility = Visibility.Visible;
+        indicator.Background = new SolidColorBrush(style.Background);
+        indicator.BorderBrush = new SolidColorBrush(style.Background);
+
+        if (indicator.Child is TextBlock textBlock)
+        {
+            textBlock.Text = style.Label;
+            textBlock.Foreground = new SolidColorBrush(style.Foreground);
+        }
+    }
+
+    private static void UpdateManualOverrideIndicator(CellViewModel cellVm, Border indicator)
+    {
+        if (string.Equals(GetCellStatus(cellVm), "Overwritten", StringComparison.OrdinalIgnoreCase))
+        {
+            indicator.Background = new SolidColorBrush(Colors.Black);
+            indicator.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            indicator.Visibility = Visibility.Collapsed;
+        }
     }
 
     private void ApplyCellStyling(Button button, CellViewModel cellVm, TextBlock? valueText = null, bool skipBorderForFormulaEndpoint = false)
@@ -935,6 +1204,18 @@ public sealed partial class MainWindow : Page
             valueText.FontSize = cellVm.Format.FontSize;
             valueText.FontWeight = cellVm.Format.IsBold ? FontWeights.SemiBold : FontWeights.Normal;
             valueText.FontStyle = cellVm.Format.IsItalic ? FontStyle.Italic : FontStyle.Normal;
+        }
+
+        var typeIndicator = (button.Content as Grid)?.Children.OfType<Border>().FirstOrDefault(b => "TypeIndicator".Equals(b.Tag));
+        if (typeIndicator != null)
+        {
+            UpdateTypeIndicator(cellVm, typeIndicator);
+        }
+
+        var manualIndicator = (button.Content as Grid)?.Children.OfType<Border>().FirstOrDefault(b => "ManualIndicator".Equals(b.Tag));
+        if (manualIndicator != null)
+        {
+            UpdateManualOverrideIndicator(cellVm, manualIndicator);
         }
 
         // Apply visual state styling to the button border; keep the overlay clear unless formula selection is active
@@ -1532,6 +1813,11 @@ public sealed partial class MainWindow : Page
 
         _isUpdatingCell = true;
 
+        if (CellStatusLabel != null)
+        {
+            CellStatusLabel.Text = string.Empty;
+        }
+
         if (cell == null)
         {
             CellInspectorPanel.Visibility = Visibility.Collapsed;
@@ -1547,46 +1833,299 @@ public sealed partial class MainWindow : Page
         {
             CellLabel.Text = $"{GetSelectionRangeLabel()} ({_multiSelection.Count} cells)";
             CellClassTypeLabel.Text = "";
+            if (CellStatusLabel != null)
+            {
+                CellStatusLabel.Text = "Multiple";
+            }
         }
         else if (cell != null)
         {
             CellLabel.Text = cell.DisplayLabel;
             var typeLabel = GetCellObjectTypeLabel(cell.Value.ObjectType);
             CellClassTypeLabel.Text = $"Type: {typeLabel}";
+            if (CellStatusLabel != null)
+            {
+                CellStatusLabel.Text = GetCellStatus(cell);
+            }
         }
 
     // When editing a string that looks like a number, prefix with '
-    if (cell != null && cell.Value != null && cell.Value.ObjectType == CellObjectType.Text && double.TryParse(cell.RawValue, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out _))
-    {
-        CellValueBox.Text = "'" + (cell.RawValue ?? string.Empty);
-    }
-    else
-    {
-        CellValueBox.Text = cell?.RawValue ?? string.Empty;
-    }
-    CellFormulaBox.Text = cell?.Formula ?? string.Empty;
-    CellNotesBox.Text = cell?.Notes ?? string.Empty;
-    AutomationModeBox.SelectedIndex = (int)(cell?.AutomationMode ?? CellAutomationMode.Manual);
+        string inspectorValue;
+
+        if (cell != null && cell.HasFormula)
+        {
+            inspectorValue = cell.DisplayValue;
+        }
+        else if (cell != null && cell.Value != null && cell.Value.ObjectType == CellObjectType.Text && double.TryParse(cell.RawValue, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out _))
+        {
+            inspectorValue = "'" + (cell.RawValue ?? string.Empty);
+        }
+        else
+        {
+            inspectorValue = cell?.RawValue ?? string.Empty;
+        }
+
+        CellValueBox.Text = inspectorValue;
+        CellValueBox.IsReadOnly = false;
+        CellFormulaBox.Text = cell?.Formula ?? string.Empty;
+        CellNotesBox.Text = cell?.Notes ?? string.Empty;
+
+        if (AutomationModeBox != null)
+        {
+            SyncAutomationModePicker(cell?.AutomationMode ?? CellAutomationMode.Manual);
+        }
 
         _isUpdatingCell = false;
     }
 
+    private static int AutomationModeToIndex(CellAutomationMode mode) => mode switch
+    {
+        CellAutomationMode.Manual => 0,
+        CellAutomationMode.OnEdit => 1,
+        CellAutomationMode.OnOpen => 2,
+        CellAutomationMode.Continuous => 3,
+        _ => 0
+    };
+
+    private static CellAutomationMode IndexToAutomationMode(int index) => index switch
+    {
+        0 => CellAutomationMode.Manual,
+        1 => CellAutomationMode.OnEdit,
+        2 => CellAutomationMode.OnOpen,
+        3 => CellAutomationMode.Continuous,
+        _ => CellAutomationMode.Manual
+    };
+
+    private void SyncAutomationModePicker(CellAutomationMode mode)
+    {
+        if (AutomationModeBox == null)
+        {
+            return;
+        }
+
+        var previous = _isUpdatingCell;
+        _isUpdatingCell = true;
+        AutomationModeBox.SelectedIndex = Math.Clamp(AutomationModeToIndex(mode), 0, AutomationModeBox.Items.Count - 1);
+        _isUpdatingCell = previous;
+    }
+
     private void ColumnHeader_RightTapped(object sender, RightTappedRoutedEventArgs e)
     {
-        if (sender is FrameworkElement element && element.Tag is int columnIndex)
+        if (sender is FrameworkElement element && element.Tag is HeaderContext context)
         {
-            _columnContextIndex = columnIndex;
+            _columnContextIndex = context.SheetIndex;
             FlyoutBase.ShowAttachedFlyout(element);
         }
     }
 
     private void RowHeader_RightTapped(object sender, RightTappedRoutedEventArgs e)
     {
-        if (sender is FrameworkElement element && element.Tag is int rowIndex)
+        if (sender is FrameworkElement element && element.Tag is HeaderContext context)
         {
-            _rowContextIndex = rowIndex;
+            _rowContextIndex = context.SheetIndex;
             FlyoutBase.ShowAttachedFlyout(element);
         }
+    }
+
+    private void ColumnHeader_PointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is not Border header || header.Tag is not HeaderContext context)
+        {
+            return;
+        }
+
+        var point = e.GetCurrentPoint(header);
+        if (!point.Properties.IsLeftButtonPressed || ViewModel.SelectedSheet is null)
+        {
+            return;
+        }
+
+        _isColumnResizing = true;
+        _activeColumnHeader = context;
+        _columnResizeStartX = e.GetCurrentPoint(SpreadsheetGrid).Position.X;
+        _columnResizeInitialWidth = ViewModel.SelectedSheet.ColumnWidths.Count > context.SheetIndex
+            ? ViewModel.SelectedSheet.ColumnWidths[context.SheetIndex]
+            : SheetViewModel.DefaultColumnWidth;
+        _columnResizeInitialDisplayWidth = Math.Max(40, _columnResizeInitialWidth * ColumnWidthScale);
+
+        header.CapturePointer(e.Pointer);
+        e.Handled = true;
+    }
+
+    private void ColumnHeader_PointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_isColumnResizing || _activeColumnHeader is null || ViewModel.SelectedSheet is null)
+        {
+            return;
+        }
+
+        var point = e.GetCurrentPoint(SpreadsheetGrid);
+        if (!point.Properties.IsLeftButtonPressed)
+        {
+            EndColumnResize(sender as UIElement, e.Pointer);
+            return;
+        }
+
+        var delta = point.Position.X - _columnResizeStartX;
+        var desiredDisplayWidth = _columnResizeInitialDisplayWidth + delta;
+        var actualWidth = Math.Clamp(desiredDisplayWidth / ColumnWidthScale, MinColumnWidth, MaxColumnWidth);
+        var displayWidth = Math.Max(40, actualWidth * ColumnWidthScale);
+
+        var sheet = ViewModel.SelectedSheet;
+        if (_activeColumnHeader.SheetIndex >= sheet.ColumnWidths.Count)
+        {
+            return;
+        }
+
+        sheet.ColumnWidths[_activeColumnHeader.SheetIndex] = actualWidth;
+
+        var definitionIndex = _activeColumnHeader.DefinitionIndex;
+        if (definitionIndex >= 0 && definitionIndex < SpreadsheetGrid.ColumnDefinitions.Count)
+        {
+            SpreadsheetGrid.ColumnDefinitions[definitionIndex].Width = new GridLength(displayWidth);
+        }
+
+        e.Handled = true;
+    }
+
+    private void ColumnHeader_PointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_isColumnResizing)
+        {
+            return;
+        }
+
+        if (_activeColumnHeader is not null && ViewModel.SelectedSheet is SheetViewModel sheet)
+        {
+            var columnIndex = _activeColumnHeader.SheetIndex;
+            var width = sheet.ColumnWidths.Count > columnIndex
+                ? sheet.ColumnWidths[columnIndex]
+                : SheetViewModel.DefaultColumnWidth;
+            EndColumnResize(sender as UIElement, e.Pointer);
+            ViewModel.StatusMessage = $"Column {GetColumnName(columnIndex)} width set to {width:F0}px";
+        }
+        else
+        {
+            EndColumnResize(sender as UIElement, e.Pointer);
+        }
+
+        e.Handled = true;
+    }
+
+    private void ColumnHeader_PointerCaptureLost(object sender, PointerRoutedEventArgs e)
+    {
+        EndColumnResize(sender as UIElement, e.Pointer);
+    }
+
+    private void EndColumnResize(UIElement? element, Pointer pointer)
+    {
+        if (!_isColumnResizing)
+        {
+            return;
+        }
+
+        element?.ReleasePointerCapture(pointer);
+        _isColumnResizing = false;
+        _activeColumnHeader = null;
+    }
+
+    private void RowHeader_PointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is not Border header || header.Tag is not HeaderContext context)
+        {
+            return;
+        }
+
+        var point = e.GetCurrentPoint(header);
+        if (!point.Properties.IsLeftButtonPressed || ViewModel.SelectedSheet is null)
+        {
+            return;
+        }
+
+        _isRowResizing = true;
+        _activeRowHeader = context;
+        _rowResizeStartY = e.GetCurrentPoint(SpreadsheetGrid).Position.Y;
+        _rowResizeInitialHeight = ViewModel.SelectedSheet.RowHeights.Count > context.SheetIndex
+            ? ViewModel.SelectedSheet.RowHeights[context.SheetIndex]
+            : SheetViewModel.DefaultRowHeight;
+
+        header.CapturePointer(e.Pointer);
+        e.Handled = true;
+    }
+
+    private void RowHeader_PointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_isRowResizing || _activeRowHeader is null || ViewModel.SelectedSheet is null)
+        {
+            return;
+        }
+
+        var point = e.GetCurrentPoint(SpreadsheetGrid);
+        if (!point.Properties.IsLeftButtonPressed)
+        {
+            EndRowResize(sender as UIElement, e.Pointer);
+            return;
+        }
+
+        var delta = point.Position.Y - _rowResizeStartY;
+        var actualHeight = Math.Clamp(_rowResizeInitialHeight + delta, MinRowHeight, MaxRowHeight);
+
+        var sheet = ViewModel.SelectedSheet;
+        if (_activeRowHeader.SheetIndex >= sheet.RowHeights.Count)
+        {
+            return;
+        }
+
+        sheet.SetRowHeight(_activeRowHeader.SheetIndex, actualHeight);
+
+        var definitionIndex = _activeRowHeader.DefinitionIndex;
+        if (definitionIndex >= 0 && definitionIndex < SpreadsheetGrid.RowDefinitions.Count)
+        {
+            SpreadsheetGrid.RowDefinitions[definitionIndex].Height = new GridLength(actualHeight);
+        }
+
+        e.Handled = true;
+    }
+
+    private void RowHeader_PointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_isRowResizing)
+        {
+            return;
+        }
+
+        if (_activeRowHeader is not null && ViewModel.SelectedSheet is SheetViewModel sheet)
+        {
+            var rowIndex = _activeRowHeader.SheetIndex;
+            var height = sheet.RowHeights.Count > rowIndex
+                ? sheet.RowHeights[rowIndex]
+                : SheetViewModel.DefaultRowHeight;
+            EndRowResize(sender as UIElement, e.Pointer);
+            ViewModel.StatusMessage = $"Row {rowIndex + 1} height set to {height:F0}px";
+        }
+        else
+        {
+            EndRowResize(sender as UIElement, e.Pointer);
+        }
+
+        e.Handled = true;
+    }
+
+    private void RowHeader_PointerCaptureLost(object sender, PointerRoutedEventArgs e)
+    {
+        EndRowResize(sender as UIElement, e.Pointer);
+    }
+
+    private void EndRowResize(UIElement? element, Pointer pointer)
+    {
+        if (!_isRowResizing)
+        {
+            return;
+        }
+
+        element?.ReleasePointerCapture(pointer);
+        _isRowResizing = false;
+        _activeRowHeader = null;
     }
 
     private void HideColumn_Click(object sender, RoutedEventArgs e)
@@ -1958,32 +2497,27 @@ public sealed partial class MainWindow : Page
         }
 
         // Position the edit box over the cell
-        var buttonPos = button.TransformToVisual(SpreadsheetGrid).TransformPoint(new Windows.Foundation.Point(0, 0));
-        
-        // Make edit box smaller: reduce by 75% relative to previous size
-        double minWidth = Math.Max(75, button.ActualWidth * 0.25);
-        double maxWidth = 175; // 700 * 0.25
-        double availableWidth = (SpreadsheetGrid.ActualWidth - buttonPos.X - 16) * 0.25;
-        if (availableWidth > 0)
+        if (CellEditBox.Parent is not UIElement container)
         {
-            CellEditBox.Width = Math.Min(maxWidth, Math.Max(minWidth, availableWidth));
-        }
-        else
-        {
-            CellEditBox.Width = Math.Min(maxWidth, minWidth);
+            return;
         }
 
-        double desiredHeight = 35; // 140 * 0.25
-        double availableHeight = (SpreadsheetGrid.ActualHeight - buttonPos.Y - 16) * 0.25;
-        if (availableHeight > 0)
+        var slot = LayoutInformation.GetLayoutSlot(button);
+        var gridOffset = SpreadsheetGrid.TransformToVisual(container).TransformPoint(new Point(slot.X, slot.Y));
+
+        if (slot.Width <= 0 || slot.Height <= 0)
         {
-            CellEditBox.Height = Math.Min(105, Math.Max(desiredHeight, Math.Min(availableHeight, desiredHeight)));
+            var desired = button.DesiredSize;
+            slot = new Rect(slot.X, slot.Y,
+                desired.Width > 0 ? desired.Width : SheetViewModel.DefaultColumnWidth * ColumnWidthScale,
+                desired.Height > 0 ? desired.Height : SheetViewModel.DefaultRowHeight);
+            gridOffset = SpreadsheetGrid.TransformToVisual(container).TransformPoint(new Point(slot.X, slot.Y));
         }
-        else
-        {
-            CellEditBox.Height = desiredHeight;
-        }
-        CellEditBox.Margin = new Thickness(buttonPos.X, buttonPos.Y, 0, 0);
+
+        const double overlayFudge = 1.0;
+        CellEditBox.Width = Math.Max(0, Math.Ceiling(slot.Width + overlayFudge));
+        CellEditBox.Height = Math.Max(0, Math.Ceiling(slot.Height + overlayFudge));
+        CellEditBox.Margin = new Thickness(Math.Floor(gridOffset.X), Math.Floor(gridOffset.Y), 0, 0);
         CellEditBox.HorizontalAlignment = HorizontalAlignment.Left;
         CellEditBox.VerticalAlignment = VerticalAlignment.Top;
         
@@ -2104,20 +2638,60 @@ public sealed partial class MainWindow : Page
 
         // Create TextBox for in-cell editing
         var textBrush = Application.Current.Resources["TextPrimaryBrush"] as SolidColorBrush
-            ?? new SolidColorBrush(Color.FromArgb(0xFF, 0xCC, 0xCC, 0xCC));
-        
+            ?? new SolidColorBrush(Colors.White);
+
+        string editText;
+        if (!string.IsNullOrEmpty(initialCharacter))
+        {
+            editText = initialCharacter;
+        }
+        else if (cell.HasFormula)
+        {
+            editText = cell.Formula ?? string.Empty;
+        }
+        else
+        {
+            editText = cell.RawValue ?? string.Empty;
+        }
+
+        if (cell.HasFormula && string.IsNullOrEmpty(initialCharacter))
+        {
+            _isFormulaEditing = true;
+            _formulaEditTargetCell = cell;
+            _updatingFormulaText = true;
+            try
+            {
+                CellFormulaBox.Text = editText;
+            }
+            finally
+            {
+                _updatingFormulaText = false;
+            }
+        }
+
         var editBox = new TextBox
         {
-            Text = initialCharacter ?? cell.RawValue ?? string.Empty,
+            Text = editText,
             Foreground = textBrush,
             Background = new SolidColorBrush(Colors.Transparent),
             BorderThickness = new Thickness(0),
-            FontSize = 10,
-            VerticalAlignment = VerticalAlignment.Center,
+            FontSize = 14,
+            VerticalAlignment = VerticalAlignment.Stretch,
             HorizontalAlignment = HorizontalAlignment.Stretch,
             Tag = "EditBox",
-            AcceptsReturn = false
+            AcceptsReturn = false,
+            Padding = new Thickness(2, 0, 2, 0),
+            VerticalContentAlignment = VerticalAlignment.Center,
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            IsTabStop = true
         };
+
+        var transparentBrush = new SolidColorBrush(Colors.Transparent);
+        editBox.Resources["TextControlBackground"] = transparentBrush;
+        editBox.Resources["TextControlBackgroundPointerOver"] = transparentBrush;
+        editBox.Resources["TextControlBackgroundFocused"] = transparentBrush;
+        editBox.Resources["TextControlBorderBrush"] = transparentBrush;
+        editBox.Resources["TextControlBorderBrushFocused"] = transparentBrush;
 
         // Track active editor and prevent double character input
         _activeCellEditBox = editBox;
@@ -2254,26 +2828,77 @@ public sealed partial class MainWindow : Page
         
         grid.Children.Add(editBox);
         
-        // Focus immediately so subsequent keystrokes are captured
+        // Focus immediately so subsequent keystrokes are captured and ensure focus sticks after remaining tap events
         editBox.Focus(FocusState.Programmatic);
-        
-        // If initial character provided, position cursor at end
-        if (!string.IsNullOrEmpty(initialCharacter))
+        DispatcherQueue.TryEnqueue(() =>
         {
-            editBox.SelectionStart = editBox.Text.Length;
-        }
-        else
-        {
-            editBox.SelectAll();
-        }
+            if (_activeCellEditBox == editBox)
+            {
+                editBox.Focus(FocusState.Keyboard);
+                if (!string.IsNullOrEmpty(initialCharacter))
+                {
+                    editBox.SelectionStart = editBox.Text.Length;
+                    editBox.SelectionLength = 0;
+                }
+                else
+                {
+                    editBox.SelectAll();
+                }
+            }
+        });
     }
 
     private void CommitInCellEdit(CellViewModel cell, Button button, string newValue)
     {
         DebugLog($"CommitInCellEdit: {cell.Address}, value='{newValue}'");
         
-        // Update cell value
-        cell.RawValue = newValue;
+        var trimmedValue = newValue?.Trim() ?? string.Empty;
+        var isFormula = trimmedValue.StartsWith("=", StringComparison.Ordinal);
+        var hadFormula = cell.HasFormula;
+
+        if (isFormula)
+        {
+            // Commit formula instead of storing as raw value
+            if (!string.Equals(cell.Formula, trimmedValue, StringComparison.Ordinal))
+            {
+                cell.Formula = trimmedValue;
+            }
+
+            // Default formula cells to Continuous automation unless explicitly Manual
+            if (cell.AutomationMode == CellAutomationMode.Manual)
+            {
+                cell.AutomationMode = CellAutomationMode.Continuous;
+                SyncAutomationModePicker(cell.AutomationMode);
+            }
+
+            // Ensure raw value doesn't preserve the literal formula text before evaluation
+            if (!string.IsNullOrEmpty(cell.RawValue))
+            {
+                using (cell.SuppressHistory())
+                {
+                    cell.RawValue = string.Empty;
+                }
+            }
+
+            // Fire evaluation so the cell displays the computed result immediately
+            _ = TriggerAutoEvaluationAsync(cell);
+        }
+        else
+        {
+            // Plain value edit. Clear existing formula if any and switch to Manual automation.
+            if (hadFormula)
+            {
+                cell.Formula = null;
+            }
+
+            cell.RawValue = newValue;
+
+            if (cell.AutomationMode != CellAutomationMode.Manual)
+            {
+                cell.AutomationMode = CellAutomationMode.Manual;
+                SyncAutomationModePicker(cell.AutomationMode);
+            }
+        }
         
         // Remove edit box and restore display
         if (button.Content is Grid grid)
@@ -2324,6 +2949,7 @@ public sealed partial class MainWindow : Page
         _selectedButton = GetButtonForCell(cell) ?? button;
         UpdateSelectionVisuals();
         UpdateSelectionSummary();
+        UpdateInspectorForCell(cell);
     }
 
     private void CancelInCellEdit(CellViewModel cell, Button button)
@@ -2693,7 +3319,49 @@ public sealed partial class MainWindow : Page
         if (CellEditBox.Tag is CellViewModel cell)
         {
             DebugLog($"COMMIT: Committing cell {cell.Address}, value='{CellEditBox.Text}'");
-            cell.RawValue = CellEditBox.Text;
+            var newValue = CellEditBox.Text ?? string.Empty;
+            var trimmedValue = newValue.Trim();
+            var isFormula = trimmedValue.StartsWith("=", StringComparison.Ordinal);
+            var hadFormula = cell.HasFormula;
+
+            if (isFormula)
+            {
+                if (!string.Equals(cell.Formula, trimmedValue, StringComparison.Ordinal))
+                {
+                    cell.Formula = trimmedValue;
+                }
+
+                if (cell.AutomationMode == CellAutomationMode.Manual)
+                {
+                    cell.AutomationMode = CellAutomationMode.Continuous;
+                    SyncAutomationModePicker(cell.AutomationMode);
+                }
+
+                if (!string.IsNullOrEmpty(cell.RawValue))
+                {
+                    using (cell.SuppressHistory())
+                    {
+                        cell.RawValue = string.Empty;
+                    }
+                }
+
+                _ = TriggerAutoEvaluationAsync(cell);
+            }
+            else
+            {
+                if (hadFormula)
+                {
+                    cell.Formula = null;
+                }
+
+                cell.RawValue = newValue;
+
+                if (cell.AutomationMode != CellAutomationMode.Manual)
+                {
+                    cell.AutomationMode = CellAutomationMode.Manual;
+                    SyncAutomationModePicker(cell.AutomationMode);
+                }
+            }
             
             // Only close edit box and refresh if not navigating between cells
             if (!_isNavigatingBetweenCells)
@@ -2731,9 +3399,13 @@ public sealed partial class MainWindow : Page
             // Update inspector if this cell is selected
             if (_selectedCell == cell)
             {
-                _isUpdatingCell = true;
-                CellValueBox.Text = cell.RawValue;
-                _isUpdatingCell = false;
+                UpdateInspectorForCell(cell);
+            }
+
+            var targetButton = _selectedButton ?? GetButtonForCell(cell);
+            if (targetButton != null)
+            {
+                ApplyCellStyling(targetButton, cell);
             }
         }
     }
@@ -2930,7 +3602,92 @@ public sealed partial class MainWindow : Page
     private void CellValue_Changed(object sender, TextChangedEventArgs e)
     {
         if (_isUpdatingCell || _selectedCell == null) return;
-        _selectedCell.RawValue = CellValueBox.Text;
+
+        var cell = _selectedCell;
+        var text = CellValueBox.Text;
+        var caretStart = CellValueBox.SelectionStart;
+        var caretLength = CellValueBox.SelectionLength;
+
+        ApplyInspectorValueChange(cell, text);
+
+        DispatcherQueue?.TryEnqueue(() =>
+        {
+            CellValueBox.Focus(FocusState.Keyboard);
+            if (caretStart >= 0)
+            {
+                var clampedStart = Math.Min(caretStart, CellValueBox.Text.Length);
+                CellValueBox.SelectionStart = clampedStart;
+                var remaining = Math.Max(0, CellValueBox.Text.Length - clampedStart);
+                CellValueBox.SelectionLength = Math.Min(caretLength, remaining);
+            }
+        });
+    }
+
+    private void ApplyInspectorValueChange(CellViewModel cell, string text)
+    {
+        cell.RawValue = text;
+
+        if (cell.HasFormula && cell.AutomationMode != CellAutomationMode.Manual)
+        {
+            cell.AutomationMode = CellAutomationMode.Manual;
+            SyncAutomationModePicker(cell.AutomationMode);
+        }
+
+        if (CellStatusLabel != null)
+        {
+            CellStatusLabel.Text = GetCellStatus(cell);
+        }
+    }
+
+    private void CommitInspectorValue(CellViewModel cell)
+    {
+        ApplyInspectorValueChange(cell, CellValueBox.Text);
+
+        if (ViewModel.SelectedSheet != null)
+        {
+            var button = _selectedButton ?? GetButtonForCell(cell);
+            if (button != null)
+            {
+                ApplyCellStyling(button, cell);
+            }
+            else
+            {
+                BuildSpreadsheetGrid(ViewModel.SelectedSheet);
+            }
+        }
+
+        UpdateInspectorForCell(cell);
+
+        DispatcherQueue?.TryEnqueue(() =>
+        {
+            CellValueBox.Focus(FocusState.Keyboard);
+            CellValueBox.SelectionStart = CellValueBox.Text.Length;
+            CellValueBox.SelectionLength = 0;
+        });
+    }
+
+    private void CellValueBox_KeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key == Windows.System.VirtualKey.Enter)
+        {
+            var shiftDown = Microsoft.UI.Input.InputKeyboardSource
+                .GetKeyStateForCurrentThread(Windows.System.VirtualKey.Shift)
+                .HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
+
+            if (!shiftDown && _selectedCell != null)
+            {
+                CommitInspectorValue(_selectedCell);
+                e.Handled = true;
+            }
+        }
+    }
+
+    private void CellValueApply_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedCell != null)
+        {
+            CommitInspectorValue(_selectedCell);
+        }
     }
 
     private void CellFormula_Changed(object sender, TextChangedEventArgs e)
@@ -2947,7 +3704,23 @@ public sealed partial class MainWindow : Page
         }
         
         if (_isUpdatingCell || _selectedCell == null) return;
-        _selectedCell.Formula = CellFormulaBox.Text;
+
+        var cell = _selectedCell;
+        var previousFormula = cell.Formula;
+        var newFormula = CellFormulaBox.Text;
+
+        cell.Formula = newFormula;
+
+        if (string.IsNullOrWhiteSpace(previousFormula) && !string.IsNullOrWhiteSpace(newFormula))
+        {
+            if (cell.AutomationMode == CellAutomationMode.Manual)
+            {
+                cell.AutomationMode = CellAutomationMode.Continuous;
+                SyncAutomationModePicker(cell.AutomationMode);
+            }
+
+            UpdateInspectorForCell(cell);
+        }
         
         // Show intellisense if typing function name (redundant but safe)
         if (!_isFormulaEditing)
@@ -3388,7 +4161,7 @@ public sealed partial class MainWindow : Page
         UpdateParameterHints();
     }
 
-    private void CellFormulaBox_LostFocus(object sender, RoutedEventArgs e)
+    private async void CellFormulaBox_LostFocus(object sender, RoutedEventArgs e)
     {
         if (_isPickingFormulaReference)
         {
@@ -3415,7 +4188,18 @@ public sealed partial class MainWindow : Page
         _isFormulaEditing = false;
         if (_formulaEditTargetCell != null && _selectedCell == _formulaEditTargetCell)
         {
-            _formulaEditTargetCell.Formula = CellFormulaBox.Text;
+            var cell = _formulaEditTargetCell;
+            var newFormula = CellFormulaBox.Text;
+
+            if (!string.Equals(cell.Formula, newFormula, StringComparison.Ordinal))
+            {
+                cell.Formula = newFormula;
+            }
+
+            if (!string.IsNullOrWhiteSpace(cell.Formula) && cell.AutomationMode != CellAutomationMode.Manual)
+            {
+                await TriggerAutoEvaluationAsync(cell);
+            }
         }
         _formulaEditTargetCell = null;
         ParameterHintPopup.IsOpen = false;
@@ -4070,7 +4854,56 @@ public sealed partial class MainWindow : Page
     private void AutomationMode_Changed(object sender, SelectionChangedEventArgs e)
     {
         if (_isUpdatingCell || _selectedCell == null) return;
-        _selectedCell.AutomationMode = (CellAutomationMode)AutomationModeBox.SelectedIndex;
+
+        var mode = IndexToAutomationMode(AutomationModeBox.SelectedIndex);
+        _selectedCell.AutomationMode = mode;
+
+        if (_selectedCell.HasFormula)
+        {
+            if (mode == CellAutomationMode.Manual)
+            {
+                UpdateInspectorForCell(_selectedCell);
+            }
+            else
+            {
+                _ = TriggerAutoEvaluationAsync(_selectedCell);
+                UpdateInspectorForCell(_selectedCell);
+            }
+        }
+    }
+
+    private async Task TriggerAutoEvaluationAsync(CellViewModel cell)
+    {
+        if (cell == null || string.IsNullOrWhiteSpace(cell.Formula) || cell.AutomationMode == CellAutomationMode.Manual)
+        {
+            return;
+        }
+
+        try
+        {
+            var result = await cell.EvaluateAsync();
+            if (result == null)
+            {
+                return;
+            }
+
+            if (result.AiResponse != null)
+            {
+                result = await ShowAIPreviewAsync(cell, result);
+                if (result == null)
+                {
+                    ViewModel.StatusMessage = "AI result cancelled";
+                    return;
+                }
+            }
+
+            await HandleEvaluationResultAsync(cell, result);
+            UpdateInspectorForCell(cell);
+        }
+        catch (Exception ex)
+        {
+            ViewModel.StatusMessage = $"Evaluation failed: {ex.Message}";
+        }
     }
 
     private async void EvaluateCell_Click(object sender, RoutedEventArgs e)
@@ -4091,6 +4924,7 @@ public sealed partial class MainWindow : Page
                 }
 
                 await HandleEvaluationResultAsync(_selectedCell, result);
+                UpdateInspectorForCell(_selectedCell);
             }
         }
     }
@@ -4308,6 +5142,12 @@ public sealed partial class MainWindow : Page
         
         var ctrl = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(Windows.System.VirtualKey.Control).HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
         var shift = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(Windows.System.VirtualKey.Shift).HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
+        object? focusedElement = null;
+        if (this.XamlRoot != null)
+        {
+            focusedElement = FocusManager.GetFocusedElement(this.XamlRoot);
+        }
+        var inspectorHasFocus = IsInspectorElement(focusedElement);
         
         // Ctrl+Z: Undo (Phase 5)
         if (ctrl && e.Key == Windows.System.VirtualKey.Z && !shift)
@@ -4358,7 +5198,28 @@ public sealed partial class MainWindow : Page
         // Navigation requires a selected cell
         if (_selectedCell == null || ViewModel.SelectedSheet == null)
             return;
-        
+
+        if (ctrl && e.Key == Windows.System.VirtualKey.C)
+        {
+            CopySelectionToClipboard();
+            e.Handled = true;
+            return;
+        }
+
+        if (ctrl && e.Key == Windows.System.VirtualKey.X)
+        {
+            CopySelectionToClipboard(cut: true);
+            e.Handled = true;
+            return;
+        }
+
+        if (ctrl && e.Key == Windows.System.VirtualKey.V)
+        {
+            await PasteFromClipboardAsync();
+            e.Handled = true;
+            return;
+        }
+
         // Ctrl+Home: Go to A1
         if (ctrl && e.Key == Windows.System.VirtualKey.Home)
         {
@@ -4366,7 +5227,7 @@ public sealed partial class MainWindow : Page
             e.Handled = true;
             return;
         }
-        
+
         // Ctrl+End: Go to last used cell
         if (ctrl && e.Key == Windows.System.VirtualKey.End)
         {
@@ -4375,7 +5236,7 @@ public sealed partial class MainWindow : Page
             e.Handled = true;
             return;
         }
-        
+
         // Ctrl+Arrow: Jump to data edge
         if (ctrl && (e.Key == Windows.System.VirtualKey.Up || e.Key == Windows.System.VirtualKey.Down ||
                      e.Key == Windows.System.VirtualKey.Left || e.Key == Windows.System.VirtualKey.Right))
@@ -4451,7 +5312,7 @@ public sealed partial class MainWindow : Page
         }
         
         // Regular keyboard input: Start editing the cell (only if not already editing)
-        if (!ctrl && !shift && IsRegularKeyboardKey(e.Key) && CellEditBox.Visibility != Visibility.Visible)
+        if (!ctrl && !shift && IsRegularKeyboardKey(e.Key) && CellEditBox.Visibility != Visibility.Visible && !inspectorHasFocus)
         {
             if (_selectedCell != null && _selectedButton != null)
             {
@@ -4678,63 +5539,196 @@ public sealed partial class MainWindow : Page
     
     // ==================== Context Menu Handlers (Phase 5 Task 16) ====================
     
+    private static string? BuildClipboardPayload(CellViewModel cell)
+    {
+        if (!string.IsNullOrWhiteSpace(cell.Formula))
+        {
+            return cell.Formula;
+        }
+
+        var raw = cell.RawValue;
+        if (!string.IsNullOrEmpty(raw))
+        {
+            return raw;
+        }
+
+        var display = cell.DisplayValue;
+        return string.IsNullOrEmpty(display) ? null : display;
+    }
+
+    private void CopySelectionToClipboard(bool cut = false)
+    {
+        if (_selectedCell is null)
+        {
+            return;
+        }
+
+        var payload = BuildClipboardPayload(_selectedCell);
+        if (payload is null)
+        {
+            ViewModel.StatusMessage = $"Cell {_selectedCell.DisplayLabel} is empty";
+            return;
+        }
+
+        var dataPackage = new DataPackage
+        {
+            RequestedOperation = cut ? DataPackageOperation.Move : DataPackageOperation.Copy
+        };
+        dataPackage.SetText(payload);
+        Clipboard.SetContent(dataPackage);
+        Clipboard.Flush();
+
+        if (cut)
+        {
+            _selectedCell.Formula = string.Empty;
+            _selectedCell.RawValue = string.Empty;
+            _selectedCell.Notes = string.Empty;
+
+            _isUpdatingCell = true;
+            CellValueBox.Text = string.Empty;
+            CellFormulaBox.Text = string.Empty;
+            CellNotesBox.Text = string.Empty;
+            _isUpdatingCell = false;
+
+            if (ViewModel.SelectedSheet != null)
+            {
+                BuildSpreadsheetGrid(ViewModel.SelectedSheet);
+            }
+
+            ViewModel.StatusMessage = $"Cut cell {_selectedCell.DisplayLabel}";
+        }
+        else
+        {
+            ViewModel.StatusMessage = $"Copied cell {_selectedCell.DisplayLabel}";
+        }
+    }
+
     private void Cut_Click(object sender, RoutedEventArgs e)
     {
-        if (_selectedCell == null) return;
-        
-        // Copy to clipboard
-        var dataPackage = new Windows.ApplicationModel.DataTransfer.DataPackage();
-        dataPackage.SetText(_selectedCell.RawValue);
-        Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(dataPackage);
-        
-        // Clear cell
-        _selectedCell.RawValue = string.Empty;
-        
-        // Refresh grid
-        if (ViewModel.SelectedSheet != null)
-        {
-            BuildSpreadsheetGrid(ViewModel.SelectedSheet);
-        }
-        
-        ViewModel.StatusMessage = $"Cut cell {_selectedCell.DisplayLabel}";
+        CopySelectionToClipboard(cut: true);
     }
     
     private void Copy_Click(object sender, RoutedEventArgs e)
     {
-        if (_selectedCell == null) return;
-        
-        var dataPackage = new Windows.ApplicationModel.DataTransfer.DataPackage();
-        dataPackage.SetText(_selectedCell.RawValue);
-        Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(dataPackage);
-        
-        ViewModel.StatusMessage = $"Copied cell {_selectedCell.DisplayLabel}";
+        CopySelectionToClipboard();
     }
     
     private async void Paste_Click(object sender, RoutedEventArgs e)
     {
-        if (_selectedCell == null) return;
-        
+        await PasteFromClipboardAsync();
+    }
+
+    private async Task PasteFromClipboardAsync()
+    {
+        if (_selectedCell is null || ViewModel.SelectedSheet is null)
+        {
+            return;
+        }
+
         try
         {
-            var dataPackageView = Windows.ApplicationModel.DataTransfer.Clipboard.GetContent();
-            if (dataPackageView.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.Text))
+            var dataPackageView = Clipboard.GetContent();
+            if (!dataPackageView.Contains(StandardDataFormats.Text))
             {
-                var text = await dataPackageView.GetTextAsync();
-                _selectedCell.RawValue = text;
-                
-                // Refresh grid
-                if (ViewModel.SelectedSheet != null)
-                {
-                    BuildSpreadsheetGrid(ViewModel.SelectedSheet);
-                }
-                
-                ViewModel.StatusMessage = $"Pasted into cell {_selectedCell.DisplayLabel}";
+                ViewModel.StatusMessage = "Clipboard does not contain text";
+                return;
             }
+
+            var rawText = await dataPackageView.GetTextAsync();
+            if (rawText is null)
+            {
+                ViewModel.StatusMessage = "Clipboard is empty";
+                return;
+            }
+
+            var normalized = rawText.Replace("\r\n", "\n").Replace('\r', '\n');
+            normalized = normalized.TrimEnd('\n');
+
+            var rows = normalized.Length == 0 ? new[] { string.Empty } : normalized.Split('\n');
+            var parsedRows = new List<string[]>();
+            var maxColumns = 0;
+            foreach (var row in rows)
+            {
+                var columns = row.Split('\t');
+                parsedRows.Add(columns);
+                maxColumns = Math.Max(maxColumns, columns.Length);
+            }
+
+            var sheet = ViewModel.SelectedSheet;
+            var startRow = _selectedCell.Row;
+            var startColumn = _selectedCell.Column;
+
+            sheet.EnsureCapacity(startRow + parsedRows.Count, startColumn + Math.Max(1, maxColumns));
+
+            var updatedCells = 0;
+            for (int r = 0; r < parsedRows.Count; r++)
+            {
+                var columns = parsedRows[r];
+                for (int c = 0; c < columns.Length; c++)
+                {
+                    var target = sheet.GetCell(startRow + r, startColumn + c);
+                    if (target is null)
+                    {
+                        continue;
+                    }
+
+                    if (ApplyClipboardValue(target, columns[c]))
+                    {
+                        updatedCells++;
+                    }
+                }
+            }
+
+            if (updatedCells > 0)
+            {
+                BuildSpreadsheetGrid(sheet);
+            }
+
+            _isUpdatingCell = true;
+            CellValueBox.Text = _selectedCell.DisplayValue;
+            CellFormulaBox.Text = _selectedCell.Formula ?? string.Empty;
+            _isUpdatingCell = false;
+
+            ViewModel.StatusMessage = updatedCells switch
+            {
+                0 => $"No changes from paste into {_selectedCell.DisplayLabel}",
+                1 => $"Pasted into cell {_selectedCell.DisplayLabel}",
+                _ => $"Pasted into {updatedCells} cells starting at {_selectedCell.DisplayLabel}"
+            };
         }
         catch (Exception ex)
         {
             ViewModel.StatusMessage = $"Paste failed: {ex.Message}";
         }
+    }
+
+    private bool ApplyClipboardValue(CellViewModel cell, string text)
+    {
+        var incoming = text?.Replace("\r", string.Empty) ?? string.Empty;
+
+        if (incoming.StartsWith("=", StringComparison.Ordinal))
+        {
+            if (!string.Equals(cell.Formula, incoming, StringComparison.Ordinal))
+            {
+                cell.Formula = incoming;
+                return true;
+            }
+            return false;
+        }
+
+        if (!string.IsNullOrEmpty(cell.Formula))
+        {
+            cell.Formula = string.Empty;
+        }
+
+        var existing = cell.RawValue ?? string.Empty;
+        if (!string.Equals(existing, incoming, StringComparison.Ordinal))
+        {
+            cell.RawValue = incoming;
+            return true;
+        }
+
+        return false;
     }
     
     private void ClearContents_Click(object sender, RoutedEventArgs e)
@@ -5102,6 +6096,19 @@ public sealed partial class MainWindow : Page
         {
             BuildSpreadsheetGrid(ViewModel.SelectedSheet);
         }
+    }
+
+    private sealed class HeaderContext
+    {
+        public HeaderContext(int sheetIndex, int definitionIndex)
+        {
+            SheetIndex = sheetIndex;
+            DefinitionIndex = definitionIndex;
+        }
+
+        public int SheetIndex { get; }
+
+        public int DefinitionIndex { get; }
     }
 
     /// <summary>

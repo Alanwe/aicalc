@@ -279,7 +279,18 @@ public class FunctionRunner
 
         foreach (var token in SplitArguments(args))
         {
-            if (CellAddress.TryParse(token.Trim(), sheet.Name, out var address))
+            var trimmed = token.Trim();
+            if (string.IsNullOrEmpty(trimmed))
+            {
+                continue;
+            }
+
+            if (TryResolveRangeArgument(workbook, sheet, trimmed, results))
+            {
+                continue;
+            }
+
+            if (CellAddress.TryParse(trimmed, sheet.Name, out var address))
             {
                 var targetSheet = workbook.GetSheet(address.SheetName) ?? sheet;
                 var cell = targetSheet.GetCell(address.Row, address.Column);
@@ -288,7 +299,7 @@ public class FunctionRunner
                     results.Add(cell);
                 }
             }
-            else if (double.TryParse(token, out var number))
+            else if (double.TryParse(trimmed, out var number))
             {
                 var temp = new CellViewModel(workbook, sheet, 0, 0)
                 {
@@ -296,9 +307,9 @@ public class FunctionRunner
                 };
                 results.Add(temp);
             }
-            else if (token.StartsWith('"') && token.EndsWith('"'))
+            else if (trimmed.Length >= 2 && trimmed.StartsWith('"') && trimmed.EndsWith('"'))
             {
-                var text = token.Trim('"');
+                var text = trimmed.Trim('"');
                 var temp = new CellViewModel(workbook, sheet, 0, 0)
                 {
                     Value = new CellValue(CellObjectType.Text, text, text)
@@ -308,6 +319,64 @@ public class FunctionRunner
         }
 
         return results;
+    }
+
+    private bool TryResolveRangeArgument(WorkbookViewModel workbook, SheetViewModel defaultSheet, string token, List<CellViewModel> results)
+    {
+        if (token.IndexOf(':') < 0)
+        {
+            return false;
+        }
+
+        var parts = token.Split(':');
+        if (parts.Length != 2)
+        {
+            return false;
+        }
+
+        var startPart = parts[0].Trim();
+        var endPart = parts[1].Trim();
+
+        if (!CellAddress.TryParse(startPart, defaultSheet.Name, out var startAddress))
+        {
+            return false;
+        }
+
+        var endDefaultSheet = startAddress.SheetName;
+        if (!CellAddress.TryParse(endPart, endDefaultSheet, out var endAddress))
+        {
+            return false;
+        }
+
+        if (!string.Equals(startAddress.SheetName, endAddress.SheetName, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var targetSheet = workbook.GetSheet(startAddress.SheetName) ?? defaultSheet;
+        if (targetSheet is null)
+        {
+            return false;
+        }
+
+        var rowStart = Math.Min(startAddress.Row, endAddress.Row);
+        var rowEnd = Math.Max(startAddress.Row, endAddress.Row);
+        var columnStart = Math.Min(startAddress.Column, endAddress.Column);
+        var columnEnd = Math.Max(startAddress.Column, endAddress.Column);
+
+        for (var row = rowStart; row <= rowEnd; row++)
+        {
+            for (var column = columnStart; column <= columnEnd; column++)
+            {
+                var cell = targetSheet.GetCell(row, column);
+                if (cell is not null)
+                {
+                    results.Add(cell);
+                }
+            }
+        }
+
+        return true;
     }
 
     private static IEnumerable<string> SplitArguments(string args)

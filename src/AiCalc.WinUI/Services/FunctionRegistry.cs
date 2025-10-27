@@ -76,7 +76,12 @@ public class FunctionRegistry
                 return new FunctionExecutionResult(new CellValue(CellObjectType.Number, sum.ToString(CultureInfo.InvariantCulture), sum.ToString(CultureInfo.CurrentCulture)));
             },
             FunctionCategory.Math,
-            new FunctionParameter("values", "Range of values to add.", CellObjectType.Number)));
+            new FunctionParameter("values", "Range of values to add.", CellObjectType.Number))
+        {
+            ResultType = CellObjectType.Number,
+            ExpectedOutput = "Returns the sum of all numeric arguments. Non-numeric values are treated as 0.",
+            Example = "=SUM(A1:C1)"
+        });
 
         // AVERAGE
         Register(new FunctionDescriptor(
@@ -93,7 +98,12 @@ public class FunctionRegistry
                 return new FunctionExecutionResult(new CellValue(CellObjectType.Number, avg.ToString(CultureInfo.InvariantCulture), avg.ToString(CultureInfo.CurrentCulture)));
             },
             FunctionCategory.Math,
-            new FunctionParameter("values", "Range of values to average.", CellObjectType.Number)));
+            new FunctionParameter("values", "Range of values to average.", CellObjectType.Number))
+        {
+            ResultType = CellObjectType.Number,
+            ExpectedOutput = "Returns the arithmetic mean of the provided numeric values.",
+            Example = "=AVERAGE(A1:A10)"
+        });
 
         // COUNT
         Register(new FunctionDescriptor(
@@ -106,7 +116,12 @@ public class FunctionRegistry
                 return new FunctionExecutionResult(new CellValue(CellObjectType.Number, count.ToString(), count.ToString()));
             },
             FunctionCategory.Math,
-            new FunctionParameter("values", "Range of values to count.", CellObjectType.Number)));
+            new FunctionParameter("values", "Range of values to count.", CellObjectType.Number))
+        {
+            ResultType = CellObjectType.Number,
+            ExpectedOutput = "Returns how many arguments are numeric.",
+            Example = "=COUNT(A1:C10)"
+        });
 
         // MIN
         Register(new FunctionDescriptor(
@@ -122,7 +137,12 @@ public class FunctionRegistry
                 return new FunctionExecutionResult(new CellValue(CellObjectType.Number, min.ToString(CultureInfo.InvariantCulture), min.ToString(CultureInfo.CurrentCulture)));
             },
             FunctionCategory.Math,
-            new FunctionParameter("values", "Range of values.", CellObjectType.Number)));
+            new FunctionParameter("values", "Range of values.", CellObjectType.Number))
+        {
+            ResultType = CellObjectType.Number,
+            ExpectedOutput = "Returns the smallest numeric value in the supplied range.",
+            Example = "=MIN(A1:C1)"
+        });
 
         // MAX
         Register(new FunctionDescriptor(
@@ -138,7 +158,12 @@ public class FunctionRegistry
                 return new FunctionExecutionResult(new CellValue(CellObjectType.Number, max.ToString(CultureInfo.InvariantCulture), max.ToString(CultureInfo.CurrentCulture)));
             },
             FunctionCategory.Math,
-            new FunctionParameter("values", "Range of values.", CellObjectType.Number)));
+            new FunctionParameter("values", "Range of values.", CellObjectType.Number))
+        {
+            ResultType = CellObjectType.Number,
+            ExpectedOutput = "Returns the largest numeric value in the supplied range.",
+            Example = "=MAX(A1:C1)"
+        });
 
         // ROUND
         Register(new FunctionDescriptor(
@@ -148,7 +173,7 @@ public class FunctionRegistry
             {
                 await Task.CompletedTask;
                 if (ctx.Arguments.Count == 0) return new FunctionExecutionResult(CellValue.Empty);
-                
+
                 var value = double.TryParse(ctx.Arguments[0].DisplayValue, out var v) ? v : 0;
                 var digits = ctx.Arguments.Count > 1 && int.TryParse(ctx.Arguments[1].DisplayValue, out var d) ? d : 0;
                 var rounded = Math.Round(value, digits);
@@ -156,7 +181,12 @@ public class FunctionRegistry
             },
             FunctionCategory.Math,
             new FunctionParameter("value", "Number to round.", CellObjectType.Number),
-            new FunctionParameter("digits", "Number of decimal places.", CellObjectType.Number, isOptional: true)));
+            new FunctionParameter("digits", "Number of decimal places.", CellObjectType.Number, isOptional: true))
+        {
+            ResultType = CellObjectType.Number,
+            ExpectedOutput = "Returns the input number rounded to the requested number of decimal places.",
+            Example = "=ROUND(A1,2)"
+        });
 
         // ABS
         Register(new FunctionDescriptor(
@@ -170,7 +200,12 @@ public class FunctionRegistry
                 return new FunctionExecutionResult(new CellValue(CellObjectType.Number, abs.ToString(CultureInfo.InvariantCulture), abs.ToString(CultureInfo.CurrentCulture)));
             },
             FunctionCategory.Math,
-            new FunctionParameter("value", "Number.", CellObjectType.Number)));
+            new FunctionParameter("value", "Number.", CellObjectType.Number))
+        {
+            ResultType = CellObjectType.Number,
+            ExpectedOutput = "Returns the non-negative magnitude of the supplied number.",
+            Example = "=ABS(A1)"
+        });
 
         // SQRT
         Register(new FunctionDescriptor(
@@ -184,7 +219,12 @@ public class FunctionRegistry
                 return new FunctionExecutionResult(new CellValue(CellObjectType.Number, sqrt.ToString(CultureInfo.InvariantCulture), sqrt.ToString(CultureInfo.CurrentCulture)));
             },
             FunctionCategory.Math,
-            new FunctionParameter("value", "Number.", CellObjectType.Number)));
+            new FunctionParameter("value", "Number.", CellObjectType.Number))
+        {
+            ResultType = CellObjectType.Number,
+            ExpectedOutput = "Returns the square root of the input number (NaN if negative).",
+            Example = "=SQRT(A1)"
+        });
 
         // POWER
         Register(new FunctionDescriptor(
@@ -200,7 +240,12 @@ public class FunctionRegistry
             },
             FunctionCategory.Math,
             new FunctionParameter("base", "Base number.", CellObjectType.Number),
-            new FunctionParameter("exponent", "Exponent.", CellObjectType.Number)));
+            new FunctionParameter("exponent", "Exponent.", CellObjectType.Number))
+        {
+            ResultType = CellObjectType.Number,
+            ExpectedOutput = "Returns the base number raised to the specified exponent.",
+            Example = "=POWER(A1,B1)"
+        });
     }
 
     private void RegisterTextFunctions()
@@ -216,7 +261,12 @@ public class FunctionRegistry
                 return new FunctionExecutionResult(new CellValue(CellObjectType.Text, text, text));
             },
             FunctionCategory.Text,
-            new FunctionParameter("values", "Values to concatenate.", CellObjectType.Text)));
+            new FunctionParameter("values", "Values to concatenate.", CellObjectType.Text))
+        {
+            ResultType = CellObjectType.Text,
+            ExpectedOutput = "Returns all text arguments joined together in order.",
+            Example = "=CONCAT(A1,B1,C1)"
+        });
 
         // UPPER
         Register(new FunctionDescriptor(
@@ -230,7 +280,12 @@ public class FunctionRegistry
                 return new FunctionExecutionResult(new CellValue(CellObjectType.Text, upper, upper));
             },
             FunctionCategory.Text,
-            new FunctionParameter("text", "Text to convert.", CellObjectType.Text)));
+            new FunctionParameter("text", "Text to convert.", CellObjectType.Text))
+        {
+            ResultType = CellObjectType.Text,
+            ExpectedOutput = "Returns the input string in uppercase characters.",
+            Example = "=UPPER(A1)"
+        });
 
         // LOWER
         Register(new FunctionDescriptor(
@@ -244,7 +299,12 @@ public class FunctionRegistry
                 return new FunctionExecutionResult(new CellValue(CellObjectType.Text, lower, lower));
             },
             FunctionCategory.Text,
-            new FunctionParameter("text", "Text to convert.", CellObjectType.Text)));
+            new FunctionParameter("text", "Text to convert.", CellObjectType.Text))
+        {
+            ResultType = CellObjectType.Text,
+            ExpectedOutput = "Returns the input string using only lowercase characters.",
+            Example = "=LOWER(A1)"
+        });
 
         // TRIM
         Register(new FunctionDescriptor(
@@ -258,7 +318,12 @@ public class FunctionRegistry
                 return new FunctionExecutionResult(new CellValue(CellObjectType.Text, trimmed, trimmed));
             },
             FunctionCategory.Text,
-            new FunctionParameter("text", "Text to trim.", CellObjectType.Text)));
+            new FunctionParameter("text", "Text to trim.", CellObjectType.Text))
+        {
+            ResultType = CellObjectType.Text,
+            ExpectedOutput = "Returns the input text without leading or trailing whitespace.",
+            Example = "=TRIM(A1)"
+        });
 
         // LEN
         Register(new FunctionDescriptor(
@@ -272,7 +337,12 @@ public class FunctionRegistry
                 return new FunctionExecutionResult(new CellValue(CellObjectType.Number, length.ToString(), length.ToString()));
             },
             FunctionCategory.Text,
-            new FunctionParameter("text", "Text to measure.", CellObjectType.Text)));
+            new FunctionParameter("text", "Text to measure.", CellObjectType.Text))
+        {
+            ResultType = CellObjectType.Number,
+            ExpectedOutput = "Returns the character count of the supplied text.",
+            Example = "=LEN(A1)"
+        });
 
         // REPLACE
         Register(new FunctionDescriptor(
@@ -290,7 +360,12 @@ public class FunctionRegistry
             FunctionCategory.Text,
             new FunctionParameter("text", "Original text.", CellObjectType.Text),
             new FunctionParameter("old_text", "Text to replace.", CellObjectType.Text),
-            new FunctionParameter("new_text", "Replacement text.", CellObjectType.Text)));
+            new FunctionParameter("new_text", "Replacement text.", CellObjectType.Text))
+        {
+            ResultType = CellObjectType.Text,
+            ExpectedOutput = "Returns the source text with the specified substring replaced.",
+            Example = "=REPLACE(\"hello\",\"ll\",\"yy\")"
+        });
 
         // SPLIT
         Register(new FunctionDescriptor(
@@ -307,7 +382,12 @@ public class FunctionRegistry
             },
             FunctionCategory.Text,
             new FunctionParameter("text", "Text to split.", CellObjectType.Text),
-            new FunctionParameter("delimiter", "Separator character.", CellObjectType.Text, isOptional: true)));
+            new FunctionParameter("delimiter", "Separator character.", CellObjectType.Text, isOptional: true))
+        {
+            ResultType = CellObjectType.Text,
+            ExpectedOutput = "Returns the input text broken into parts joined by commas.",
+            Example = "=SPLIT(A1,\",\")"
+        });
     }
 
     private void RegisterDateTimeFunctions()
@@ -322,7 +402,12 @@ public class FunctionRegistry
                 var now = DateTime.Now;
                 return new FunctionExecutionResult(new CellValue(CellObjectType.DateTime, now.ToString("O"), now.ToString()));
             },
-            FunctionCategory.DateTime));
+            FunctionCategory.DateTime)
+        {
+            ResultType = CellObjectType.DateTime,
+            ExpectedOutput = "Returns the current system date and time when recalculated.",
+            Example = "=NOW()"
+        });
 
         // TODAY
         Register(new FunctionDescriptor(
@@ -334,7 +419,12 @@ public class FunctionRegistry
                 var today = DateTime.Today;
                 return new FunctionExecutionResult(new CellValue(CellObjectType.DateTime, today.ToString("O"), today.ToShortDateString()));
             },
-            FunctionCategory.DateTime));
+            FunctionCategory.DateTime)
+        {
+            ResultType = CellObjectType.DateTime,
+            ExpectedOutput = "Returns today's date with no time component.",
+            Example = "=TODAY()"
+        });
 
         // DATE
         Register(new FunctionDescriptor(
@@ -352,7 +442,12 @@ public class FunctionRegistry
             FunctionCategory.DateTime,
             new FunctionParameter("year", "Year.", CellObjectType.Number),
             new FunctionParameter("month", "Month.", CellObjectType.Number),
-            new FunctionParameter("day", "Day.", CellObjectType.Number)));
+            new FunctionParameter("day", "Day.", CellObjectType.Number))
+        {
+            ResultType = CellObjectType.DateTime,
+            ExpectedOutput = "Returns a date composed from the supplied year, month, and day.",
+            Example = "=DATE(2025,10,1)"
+        });
     }
 
     private void RegisterFileFunctions()
@@ -373,7 +468,12 @@ public class FunctionRegistry
                 return new FunctionExecutionResult(new CellValue(CellObjectType.Number, size.ToString(), $"{size:N0} bytes"));
             },
             FunctionCategory.File,
-            new FunctionParameter("file", "File path.", CellObjectType.File, additionalAcceptableTypes: CellObjectType.Text)));
+            new FunctionParameter("file", "File path.", CellObjectType.File, additionalAcceptableTypes: CellObjectType.Text))
+        {
+            ResultType = CellObjectType.Number,
+            ExpectedOutput = "Returns the file size in bytes when the file exists.",
+            Example = "=FILE_SIZE(\"C:/Data/report.csv\")"
+        });
 
         // FILE_EXTENSION
         Register(new FunctionDescriptor(
@@ -387,7 +487,12 @@ public class FunctionRegistry
                 return new FunctionExecutionResult(new CellValue(CellObjectType.Text, extension, extension));
             },
             FunctionCategory.File,
-            new FunctionParameter("file", "File path.", CellObjectType.File, additionalAcceptableTypes: CellObjectType.Text)));
+            new FunctionParameter("file", "File path.", CellObjectType.File, additionalAcceptableTypes: CellObjectType.Text))
+        {
+            ResultType = CellObjectType.Text,
+            ExpectedOutput = "Returns the file extension including the leading period.",
+            Example = "=FILE_EXTENSION(\"report.pdf\")"
+        });
 
         // FILE_NAME
         Register(new FunctionDescriptor(
@@ -401,7 +506,12 @@ public class FunctionRegistry
                 return new FunctionExecutionResult(new CellValue(CellObjectType.Text, fileName, fileName));
             },
             FunctionCategory.File,
-            new FunctionParameter("file", "File path.", CellObjectType.File, additionalAcceptableTypes: CellObjectType.Text)));
+            new FunctionParameter("file", "File path.", CellObjectType.File, additionalAcceptableTypes: CellObjectType.Text))
+        {
+            ResultType = CellObjectType.Text,
+            ExpectedOutput = "Returns just the file name portion of the supplied path.",
+            Example = "=FILE_NAME(\"C:/Data/report.pdf\")"
+        });
 
         // FILE_READ
         Register(new FunctionDescriptor(
@@ -418,7 +528,12 @@ public class FunctionRegistry
                 return new FunctionExecutionResult(new CellValue(CellObjectType.Text, content, content));
             },
             FunctionCategory.File,
-            new FunctionParameter("file", "File path.", CellObjectType.File, additionalAcceptableTypes: CellObjectType.Text)));
+            new FunctionParameter("file", "File path.", CellObjectType.File, additionalAcceptableTypes: CellObjectType.Text))
+        {
+            ResultType = CellObjectType.Text,
+            ExpectedOutput = "Returns the entire text contents of the specified file.",
+            Example = "=FILE_READ(\"notes.txt\")"
+        });
     }
 
     private void RegisterDirectoryFunctions()
@@ -440,7 +555,12 @@ public class FunctionRegistry
                 return new FunctionExecutionResult(new CellValue(CellObjectType.Text, result, result));
             },
             FunctionCategory.Directory,
-            new FunctionParameter("directory", "Directory path.", CellObjectType.Directory, additionalAcceptableTypes: CellObjectType.Text)));
+            new FunctionParameter("directory", "Directory path.", CellObjectType.Directory, additionalAcceptableTypes: CellObjectType.Text))
+        {
+            ResultType = CellObjectType.Text,
+            ExpectedOutput = "Returns a comma-separated list of file names in the directory.",
+            Example = "=DIR_LIST(\"C:/Data\")"
+        });
 
         // DIR_SIZE
         Register(new FunctionDescriptor(
@@ -459,7 +579,12 @@ public class FunctionRegistry
                 return new FunctionExecutionResult(new CellValue(CellObjectType.Number, size.ToString(), $"{size:N0} bytes"));
             },
             FunctionCategory.Directory,
-            new FunctionParameter("directory", "Directory path.", CellObjectType.Directory, additionalAcceptableTypes: CellObjectType.Text)));
+            new FunctionParameter("directory", "Directory path.", CellObjectType.Directory, additionalAcceptableTypes: CellObjectType.Text))
+        {
+            ResultType = CellObjectType.Number,
+            ExpectedOutput = "Returns the total size of all files under the directory in bytes.",
+            Example = "=DIR_SIZE(\"C:/Data\")"
+        });
 
         // DIRECTORY_TO_TABLE
         Register(new FunctionDescriptor(
@@ -473,7 +598,12 @@ public class FunctionRegistry
                 return new FunctionExecutionResult(new CellValue(CellObjectType.Table, json, $"Directory snapshot: {path}"));
             },
             FunctionCategory.Directory,
-            new FunctionParameter("directory", "Directory path", CellObjectType.Directory, additionalAcceptableTypes: CellObjectType.Text)));
+            new FunctionParameter("directory", "Directory path", CellObjectType.Directory, additionalAcceptableTypes: CellObjectType.Text))
+        {
+            ResultType = CellObjectType.Table,
+            ExpectedOutput = "Returns a table-friendly JSON snapshot of files in the directory.",
+            Example = "=DIRECTORY_TO_TABLE(\"C:/Data\")"
+        });
     }
 
     private void RegisterTableFunctions()
@@ -489,7 +619,12 @@ public class FunctionRegistry
             },
             FunctionCategory.Table,
             new FunctionParameter("table", "Table to filter.", CellObjectType.Table),
-            new FunctionParameter("criteria", "Filter criteria.", CellObjectType.Text)));
+            new FunctionParameter("criteria", "Filter criteria.", CellObjectType.Text))
+        {
+            ResultType = CellObjectType.Table,
+            ExpectedOutput = "Returns a table containing only rows that match the criteria.",
+            Example = "=TABLE_FILTER(A1,\"status = 'Open'\")"
+        });
 
         // TABLE_SORT (placeholder implementation)
         Register(new FunctionDescriptor(
@@ -502,7 +637,12 @@ public class FunctionRegistry
             },
             FunctionCategory.Table,
             new FunctionParameter("table", "Table to sort.", CellObjectType.Table),
-            new FunctionParameter("column", "Column name.", CellObjectType.Text)));
+            new FunctionParameter("column", "Column name.", CellObjectType.Text))
+        {
+            ResultType = CellObjectType.Table,
+            ExpectedOutput = "Returns the input table sorted by the specified column.",
+            Example = "=TABLE_SORT(A1,\"Name\")"
+        });
     }
 
     private void RegisterImageFunctions()
@@ -524,7 +664,12 @@ public class FunctionRegistry
                 return new FunctionExecutionResult(new CellValue(CellObjectType.Text, result, result));
             },
             FunctionCategory.Image,
-            new FunctionParameter("image", "Image file.", CellObjectType.Image)));
+            new FunctionParameter("image", "Image file.", CellObjectType.Image))
+        {
+            ResultType = CellObjectType.Text,
+            ExpectedOutput = "Returns a short description of the image file including size.",
+            Example = "=IMAGE_INFO(\"photo.png\")"
+        });
     }
 
     private void RegisterPdfFunctions()
@@ -540,7 +685,12 @@ public class FunctionRegistry
                 return new FunctionExecutionResult(new CellValue(CellObjectType.Text, "[PDF Text Content]", $"Extracted text from {System.IO.Path.GetFileName(pdfPath)}"));
             },
             FunctionCategory.Pdf,
-            new FunctionParameter("pdf", "PDF file.", CellObjectType.Pdf)));
+            new FunctionParameter("pdf", "PDF file.", CellObjectType.Pdf))
+        {
+            ResultType = CellObjectType.Text,
+            ExpectedOutput = "Returns the raw text extracted from the PDF document.",
+            Example = "=PDF_TO_TEXT(\"contract.pdf\")"
+        });
 
         // PDF_PAGE_COUNT (placeholder)
         Register(new FunctionDescriptor(
@@ -552,7 +702,12 @@ public class FunctionRegistry
                 return new FunctionExecutionResult(new CellValue(CellObjectType.Number, "1", "1 page"));
             },
             FunctionCategory.Pdf,
-            new FunctionParameter("pdf", "PDF file.", CellObjectType.Pdf)));
+            new FunctionParameter("pdf", "PDF file.", CellObjectType.Pdf))
+        {
+            ResultType = CellObjectType.Number,
+            ExpectedOutput = "Returns the total number of pages detected in the PDF.",
+            Example = "=PDF_PAGE_COUNT(\"contract.pdf\")"
+        });
     }
 
     private void RegisterAIFunctions()
@@ -569,7 +724,12 @@ public class FunctionRegistry
                 return new FunctionExecutionResult(new CellValue(CellObjectType.Text, "[AI Processing Required]", $"Processing image: {System.IO.Path.GetFileName(imagePath)}"));
             },
             FunctionCategory.AI,
-            new FunctionParameter("image", "Image to caption.", CellObjectType.Image)));
+            new FunctionParameter("image", "Image to caption.", CellObjectType.Image))
+        {
+            ResultType = CellObjectType.Text,
+            ExpectedOutput = "Returns a natural-language caption describing the supplied image.",
+            Example = "=IMAGE_TO_CAPTION(\"photo.png\")"
+        });
 
         // TEXT_TO_IMAGE - Generate images from text prompts
         Register(new FunctionDescriptor(
@@ -582,7 +742,12 @@ public class FunctionRegistry
                 return new FunctionExecutionResult(new CellValue(CellObjectType.Image, "[AI Processing Required]", $"Generating image from: {prompt}"));
             },
             FunctionCategory.AI,
-            new FunctionParameter("prompt", "Text description of the image to generate.", CellObjectType.Text)));
+            new FunctionParameter("prompt", "Text description of the image to generate.", CellObjectType.Text))
+        {
+            ResultType = CellObjectType.Image,
+            ExpectedOutput = "Returns an AI-generated image asset for the provided prompt.",
+            Example = "=TEXT_TO_IMAGE(\"A lighthouse at sunset\")"
+        });
 
         // TRANSLATE - Translate text between languages
         Register(new FunctionDescriptor(
@@ -597,7 +762,12 @@ public class FunctionRegistry
             },
             FunctionCategory.AI,
             new FunctionParameter("text", "Text to translate.", CellObjectType.Text),
-            new FunctionParameter("target_language", "Target language (e.g., Spanish, French, Japanese).", CellObjectType.Text)));
+            new FunctionParameter("target_language", "Target language (e.g., Spanish, French, Japanese).", CellObjectType.Text))
+        {
+            ResultType = CellObjectType.Text,
+            ExpectedOutput = "Returns the translated text in the requested language.",
+            Example = "=TRANSLATE(A1,\"Spanish\")"
+        });
 
         // SUMMARIZE - Summarize long text
         Register(new FunctionDescriptor(
@@ -612,7 +782,12 @@ public class FunctionRegistry
             },
             FunctionCategory.AI,
             new FunctionParameter("text", "Text to summarize.", CellObjectType.Text),
-            new FunctionParameter("max_words", "Maximum summary length in words.", CellObjectType.Number, isOptional: true)));
+            new FunctionParameter("max_words", "Maximum summary length in words.", CellObjectType.Number, isOptional: true))
+        {
+            ResultType = CellObjectType.Text,
+            ExpectedOutput = "Returns a condensed summary of the input text.",
+            Example = "=SUMMARIZE(A1,100)"
+        });
 
         // CHAT - Interactive conversation with AI
         Register(new FunctionDescriptor(
@@ -626,7 +801,12 @@ public class FunctionRegistry
             },
             FunctionCategory.AI,
             new FunctionParameter("message", "Your message to the AI.", CellObjectType.Text),
-            new FunctionParameter("system_prompt", "Optional system instructions.", CellObjectType.Text, isOptional: true)));
+            new FunctionParameter("system_prompt", "Optional system instructions.", CellObjectType.Text, isOptional: true))
+        {
+            ResultType = CellObjectType.Text,
+            ExpectedOutput = "Returns the assistant's reply to the provided message.",
+            Example = "=CHAT(\"Summarize the agenda\")"
+        });
 
         // CODE_REVIEW - Review code and provide suggestions
         Register(new FunctionDescriptor(
@@ -639,7 +819,12 @@ public class FunctionRegistry
                 return new FunctionExecutionResult(new CellValue(CellObjectType.Text, "[AI Processing Required]", "Reviewing code..."));
             },
             FunctionCategory.AI,
-            new FunctionParameter("code", "Code to review.", CellObjectType.CodePython, false, CellObjectType.CodeCSharp, CellObjectType.CodeJavaScript, CellObjectType.CodeTypeScript, CellObjectType.CodeHtml, CellObjectType.CodeCss)));
+            new FunctionParameter("code", "Code to review.", CellObjectType.CodePython, false, CellObjectType.CodeCSharp, CellObjectType.CodeJavaScript, CellObjectType.CodeTypeScript, CellObjectType.CodeHtml, CellObjectType.CodeCss))
+        {
+            ResultType = CellObjectType.Text,
+            ExpectedOutput = "Returns annotated feedback that highlights issues and improvements in the source code.",
+            Example = "=CODE_REVIEW(A1)"
+        });
 
         // JSON_QUERY - Query JSON data using natural language
         Register(new FunctionDescriptor(
@@ -654,7 +839,12 @@ public class FunctionRegistry
             },
             FunctionCategory.AI,
             new FunctionParameter("json", "JSON data to query.", CellObjectType.Json),
-            new FunctionParameter("query", "Natural language query.", CellObjectType.Text)));
+            new FunctionParameter("query", "Natural language query.", CellObjectType.Text))
+        {
+            ResultType = CellObjectType.Json,
+            ExpectedOutput = "Returns a JSON fragment that answers the natural language query.",
+            Example = "=JSON_QUERY(A1,\"total sales\")"
+        });
 
         // AI_EXTRACT - Extract specific information from text
         Register(new FunctionDescriptor(
@@ -669,7 +859,12 @@ public class FunctionRegistry
             },
             FunctionCategory.AI,
             new FunctionParameter("text", "Text to analyze.", CellObjectType.Text),
-            new FunctionParameter("extract_type", "What to extract (emails, dates, names, entities).", CellObjectType.Text)));
+            new FunctionParameter("extract_type", "What to extract (emails, dates, names, entities).", CellObjectType.Text))
+        {
+            ResultType = CellObjectType.Text,
+            ExpectedOutput = "Returns the extracted values, typically one item per line.",
+            Example = "=AI_EXTRACT(A1,\"email addresses\")"
+        });
 
         // SENTIMENT - Analyze sentiment of text
         Register(new FunctionDescriptor(
@@ -682,6 +877,11 @@ public class FunctionRegistry
                 return new FunctionExecutionResult(new CellValue(CellObjectType.Text, "[AI Processing Required]", "Analyzing sentiment..."));
             },
             FunctionCategory.AI,
-            new FunctionParameter("text", "Text to analyze.", CellObjectType.Text)));
+            new FunctionParameter("text", "Text to analyze.", CellObjectType.Text))
+        {
+            ResultType = CellObjectType.Text,
+            ExpectedOutput = "Returns a sentiment label (Positive/Negative/Neutral) with confidence.",
+            Example = "=SENTIMENT(A1)"
+        });
     }
 }

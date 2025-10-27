@@ -59,5 +59,9 @@ namespace AiCalc.Services
         public string Description { get; }
         public FunctionCategory Category { get; }
         public IReadOnlyList<FunctionParameter> Parameters { get; }
+
+        public string? ExpectedOutput { get; set; }
+        public string? Example { get; set; }
+        public CellObjectType? ResultType { get; set; }
     }
 }

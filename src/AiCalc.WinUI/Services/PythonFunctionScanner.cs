@@ -159,7 +159,7 @@ public class PythonFunctionScanner
             _ => FunctionCategory.Contrib
         };
 
-        return new FunctionDescriptor(
+        var descriptor = new FunctionDescriptor(
             name: info.Name,
             description: info.Description,
             handler: async context =>
@@ -173,7 +173,16 @@ public class PythonFunctionScanner
             },
             category: category,
             parameters: parameters
-        );
+        )
+        {
+            ResultType = MapPythonTypeToCellType(info.ReturnType),
+            ExpectedOutput = string.IsNullOrWhiteSpace(info.ReturnType)
+                ? null
+                : $"Returns a {info.ReturnType} value.",
+            Example = info.Examples?.FirstOrDefault()
+        };
+
+        return descriptor;
     }
 
     /// <summary>
