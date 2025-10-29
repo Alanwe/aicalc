@@ -36,6 +36,8 @@
             <MenuFlyoutSeparator/>
             <MenuFlyoutItem Text="🎨 Format Cell" Click="FormatCell_Click" />
             <MenuFlyoutItem Text="🖌️ Format Painter" Click="FormatPainter_Click" />
+            <MenuFlyoutSeparator/>
+            <MenuFlyoutItem Text="☁ Import from Data Source..." Click="CellImportFromDataSource_Click" />
             <MenuFlyoutItem Text="🔁 Extract Formula..." Click="ExtractFormula_Click" />
             <MenuFlyoutItem Text="📜 View History" Click="ViewHistory_Click" />
         </MenuFlyout>
@@ -87,12 +89,9 @@
                         Click="SaveButton_Click" />
                 <Button Content="📂 Load"
                         Click="LoadButton_Click" />
-                <Button Content="📤 Export CSV"
-                        Click="ExportCsvButton_Click"
-                        ToolTipService.ToolTip="Export current sheet to CSV" />
-                <Button Content="📥 Import CSV"
-                        Click="ImportCsvButton_Click"
-                        ToolTipService.ToolTip="Import CSV as new sheet" />
+                <Button Content="☁ Data Sources"
+                    Click="DataSourcesButton_Click"
+                    ToolTipService.ToolTip="Manage cloud data source connections" />
                 <Button Content="⚙️ Settings"
                         Click="SettingsButton_Click" />
         <Button x:Name="ThemeToggleButton"
@@ -472,6 +471,48 @@
                                         </Border>
                                     </Popup>
                                 </Grid>
+                            </StackPanel>
+
+                            <StackPanel x:Name="CloudImportPanel" Spacing="6">
+                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <TextBlock Text="Cloud Data Source" Foreground="{ThemeResource TextPrimaryBrush}" FontSize="13" FontWeight="SemiBold" />
+                                    <Button x:Name="ManageDataSourcesButton"
+                                            Content="Manage"
+                                            Click="ManageDataSourcesButton_Click"
+                                            Padding="10,4"
+                                            FontSize="12" />
+                                </StackPanel>
+                                <TextBlock x:Name="CloudImportHelpText"
+                                           Text="Add a cloud data source to enable imports."
+                                           Foreground="{ThemeResource TextSecondaryBrush}"
+                                           FontSize="12"
+                                           TextWrapping="Wrap" />
+                                <ToggleSwitch x:Name="CloudImportToggle"
+                                              Header="Enable cloud import"
+                                              Toggled="CloudImportToggle_Toggled" />
+                                <ComboBox x:Name="CloudConnectionBox"
+                                          Header="Data source"
+                                          ItemsSource="{x:Bind ViewModel.Settings.CloudStorageConnections, Mode=OneWay}"
+                                          DisplayMemberPath="Name"
+                                          SelectionChanged="CloudConnectionBox_SelectionChanged"
+                                          IsEnabled="False" />
+                                <AutoSuggestBox x:Name="CloudContainerBox"
+                                                Header="Container / Bucket"
+                                                ItemsSource="{x:Bind CloudContainerSuggestions, Mode=OneWay}"
+                                                PlaceholderText="Select or type a container"
+                                                TextChanged="CloudContainerBox_TextChanged"
+                                                SuggestionChosen="CloudContainerBox_SuggestionChosen"
+                                                LostFocus="CloudContainerBox_LostFocus"
+                                                IsEnabled="False" />
+                                <TextBox x:Name="CloudFilterBox"
+                                         Header="Filter pattern"
+                                         PlaceholderText="e.g., *.csv or data/*.json"
+                                         TextChanged="CloudFilterBox_TextChanged"
+                                         IsEnabled="False" />
+                                <TextBlock x:Name="CloudImportSummary"
+                                           Foreground="{ThemeResource TextSecondaryBrush}"
+                                           FontSize="11"
+                                           TextWrapping="Wrap" />
                             </StackPanel>
                             
                             <!-- TEST: Visible function list -->

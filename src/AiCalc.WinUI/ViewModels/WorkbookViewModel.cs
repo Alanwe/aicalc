@@ -377,7 +377,8 @@ public partial class WorkbookViewModel : BaseViewModel
                     AutomationMode = cell.AutomationMode,
                     Notes = cell.Notes,
                     Format = cell.Format.Clone(),
-                    History = new ObservableCollection<CellHistoryEntry>(cell.History.Select(h => h.Clone()))
+                    History = new ObservableCollection<CellHistoryEntry>(cell.History.Select(h => h.Clone())),
+                    CloudImport = cell.CloudImport?.Clone()
                 });
             }
 

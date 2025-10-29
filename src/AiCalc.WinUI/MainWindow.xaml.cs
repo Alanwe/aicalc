@@ -11,6 +11,7 @@ using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Text;
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Globalization;
 using System.Linq;
@@ -50,6 +51,7 @@ public sealed partial class MainWindow : Page
         CellObjectType.DateTime,
         CellObjectType.Json
     };
+    public ObservableCollection<string> CloudContainerSuggestions { get; } = new();
     private CellViewModel? _selectionAnchor;
     private bool _isLeftSplitterDragging;
     private bool _isRightSplitterDragging;
@@ -1875,6 +1877,71 @@ public sealed partial class MainWindow : Page
             SyncAutomationModePicker(cell?.AutomationMode ?? CellAutomationMode.Manual);
         }
 
+        if (CloudImportPanel != null)
+        {
+            var hasConnections = ViewModel.Settings.CloudStorageConnections.Count > 0;
+
+            if (CloudImportHelpText != null)
+            {
+                CloudImportHelpText.Visibility = hasConnections ? Visibility.Collapsed : Visibility.Visible;
+            }
+
+            if (CloudImportToggle != null)
+            {
+                CloudImportToggle.IsEnabled = hasConnections || cell?.CloudImport != null;
+                CloudImportToggle.IsOn = cell?.CloudImport != null;
+            }
+
+            var isEnabled = CloudImportToggle?.IsOn == true;
+
+            if (CloudConnectionBox != null)
+            {
+                CloudConnectionBox.IsEnabled = isEnabled;
+                if (cell?.CloudImport != null)
+                {
+                    var connection = ViewModel.Settings.CloudStorageConnections.FirstOrDefault(c => c.Id == cell.CloudImport.ConnectionId);
+                    CloudConnectionBox.SelectedItem = connection;
+                    PopulateCloudContainerSuggestions(connection);
+                }
+                else
+                {
+                    CloudConnectionBox.SelectedItem = null;
+                    PopulateCloudContainerSuggestions(null);
+                }
+            }
+            else if (cell?.CloudImport != null)
+            {
+                PopulateCloudContainerSuggestions(ViewModel.Settings.CloudStorageConnections.FirstOrDefault(c => c.Id == cell.CloudImport.ConnectionId));
+            }
+            else
+            {
+                PopulateCloudContainerSuggestions(null);
+            }
+
+            if (CloudContainerBox != null)
+            {
+                CloudContainerBox.IsEnabled = isEnabled;
+            }
+
+            if (CloudFilterBox != null)
+            {
+                CloudFilterBox.IsEnabled = isEnabled;
+            }
+
+            if (cell?.CloudImport != null)
+            {
+                SetCloudContainerText(cell.CloudImport.ContainerName);
+                SetCloudFilterText(cell.CloudImport.FilterPattern);
+                UpdateCloudImportSummary(cell);
+            }
+            else
+            {
+                SetCloudContainerText(string.Empty);
+                SetCloudFilterText("*.*");
+                UpdateCloudImportSummary(null);
+            }
+        }
+
         _isUpdatingCell = false;
     }
 
@@ -3536,6 +3603,51 @@ public sealed partial class MainWindow : Page
         RefreshSheetTabs();
     }
 
+    private async void DataSourcesButton_Click(object sender, RoutedEventArgs e)
+    {
+        await ShowDataSourcesDialogAsync();
+    }
+
+    private async void ManageDataSourcesButton_Click(object sender, RoutedEventArgs e)
+    {
+        await ShowDataSourcesDialogAsync();
+    }
+
+    private async Task ShowDataSourcesDialogAsync()
+    {
+        var dialog = new DataSourcesDialog(ViewModel.Settings);
+        
+        // Show as modal window - no XamlRoot needed for Window
+        var tcs = new TaskCompletionSource<bool>();
+        dialog.Closed += (sender, result) =>
+        {
+            tcs.SetResult(result == DialogWindowBase.DialogResult.Primary);
+        };
+        
+        dialog.Activate();
+        await tcs.Task;
+
+        if (_selectedCell != null)
+        {
+            var config = _selectedCell.CloudImport;
+            if (config != null)
+            {
+                var connection = ViewModel.Settings.CloudStorageConnections.FirstOrDefault(c => c.Id == config.ConnectionId);
+                if (connection == null)
+                {
+                    using (_selectedCell.SuppressHistory())
+                    {
+                        _selectedCell.CloudImport = null;
+                    }
+
+                    ViewModel.StatusMessage = "Cloud import cleared because the selected data source was removed.";
+                }
+            }
+
+            UpdateInspectorForCell(_selectedCell);
+        }
+    }
+
     private async void ExportCsvButton_Click(object sender, RoutedEventArgs e)
     {
         if (ViewModel.SelectedSheet == null)
@@ -3688,6 +3800,284 @@ public sealed partial class MainWindow : Page
         {
             CommitInspectorValue(_selectedCell);
         }
+    }
+
+    private async void CellImportFromDataSource_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selectedCell == null)
+        {
+            return;
+        }
+
+        SetInspectorPanelVisibility(true, ViewModel.Settings.InspectorPanelWidth);
+
+        if (ViewModel.Settings.CloudStorageConnections.Count == 0)
+        {
+            await ShowDataSourcesDialogAsync();
+            if (ViewModel.Settings.CloudStorageConnections.Count == 0)
+            {
+                return;
+            }
+        }
+
+        if (_selectedCell.CloudImport == null)
+        {
+            var connection = ViewModel.Settings.CloudStorageConnections.FirstOrDefault();
+            if (connection != null)
+            {
+                using (_selectedCell.SuppressHistory())
+                {
+                    _selectedCell.CloudImport = new CloudImportConfiguration
+                    {
+                        ConnectionId = connection.Id,
+                        ConnectionName = connection.Name,
+                        ContainerName = string.Empty,
+                        FilterPattern = "*.*"
+                    };
+                }
+
+                _selectedCell.MarkAsStale();
+            }
+        }
+
+        if (CloudImportToggle != null)
+        {
+            var previous = _isUpdatingCell;
+            _isUpdatingCell = true;
+            CloudImportToggle.IsOn = _selectedCell.CloudImport != null;
+            _isUpdatingCell = previous;
+        }
+
+        UpdateInspectorForCell(_selectedCell);
+        CloudConnectionBox?.Focus(FocusState.Keyboard);
+    }
+
+    private async void CloudImportToggle_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_isUpdatingCell || _selectedCell == null)
+        {
+            return;
+        }
+
+        if (CloudImportToggle == null)
+        {
+            return;
+        }
+
+        if (CloudImportToggle.IsOn)
+        {
+            if (ViewModel.Settings.CloudStorageConnections.Count == 0)
+            {
+                var previous = _isUpdatingCell;
+                _isUpdatingCell = true;
+                CloudImportToggle.IsOn = false;
+                _isUpdatingCell = previous;
+                await ShowDataSourcesDialogAsync();
+                return;
+            }
+
+            var connection = CloudConnectionBox?.SelectedItem as CloudStorageConnection
+                ?? ViewModel.Settings.CloudStorageConnections.FirstOrDefault();
+
+            if (connection != null)
+            {
+                using (_selectedCell.SuppressHistory())
+                {
+                    var config = _selectedCell.CloudImport?.Clone() ?? new CloudImportConfiguration();
+                    config.ConnectionId = connection.Id;
+                    config.ConnectionName = connection.Name;
+                    if (string.IsNullOrWhiteSpace(config.ContainerName))
+                    {
+                        config.ContainerName = string.Empty;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(config.FilterPattern))
+                    {
+                        config.FilterPattern = "*.*";
+                    }
+
+                    _selectedCell.CloudImport = config;
+                }
+
+                _selectedCell.MarkAsStale();
+            }
+        }
+        else
+        {
+            using (_selectedCell.SuppressHistory())
+            {
+                _selectedCell.CloudImport = null;
+            }
+
+            _selectedCell.MarkAsStale();
+        }
+
+        UpdateInspectorForCell(_selectedCell);
+    }
+
+    private void CloudConnectionBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isUpdatingCell || _selectedCell == null)
+        {
+            return;
+        }
+
+        if (CloudImportToggle?.IsOn != true)
+        {
+            return;
+        }
+
+        if (CloudConnectionBox?.SelectedItem is not CloudStorageConnection connection)
+        {
+            return;
+        }
+
+        using (_selectedCell.SuppressHistory())
+        {
+            var config = _selectedCell.CloudImport ?? new CloudImportConfiguration();
+            config.ConnectionId = connection.Id;
+            config.ConnectionName = connection.Name;
+
+            if (string.IsNullOrWhiteSpace(config.ContainerName))
+            {
+                config.ContainerName = string.Empty;
+            }
+
+            if (string.IsNullOrWhiteSpace(config.FilterPattern))
+            {
+                config.FilterPattern = "*.*";
+            }
+
+            _selectedCell.CloudImport = config;
+        }
+
+        PopulateCloudContainerSuggestions(connection);
+
+        if (_selectedCell.CloudImport != null)
+        {
+            SetCloudContainerText(_selectedCell.CloudImport.ContainerName);
+            SetCloudFilterText(_selectedCell.CloudImport.FilterPattern);
+            UpdateCloudImportSummary(_selectedCell);
+        }
+
+        _selectedCell.MarkAsStale();
+    }
+
+    private void CloudContainerBox_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
+    {
+        if (_isUpdatingCell || _selectedCell?.CloudImport == null)
+        {
+            return;
+        }
+
+        if (args.Reason == AutoSuggestionBoxTextChangeReason.UserInput)
+        {
+            ApplyContainerText(sender.Text);
+        }
+    }
+
+    private void CloudContainerBox_SuggestionChosen(AutoSuggestBox sender, AutoSuggestBoxSuggestionChosenEventArgs args)
+    {
+        if (_isUpdatingCell || _selectedCell?.CloudImport == null)
+        {
+            return;
+        }
+
+        if (args.SelectedItem is string selected)
+        {
+            ApplyContainerText(selected);
+        }
+    }
+
+    private void CloudContainerBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (_isUpdatingCell || _selectedCell?.CloudImport == null)
+        {
+            return;
+        }
+
+        ApplyContainerText(CloudContainerBox?.Text);
+    }
+
+    private void CloudFilterBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_isUpdatingCell || _selectedCell?.CloudImport == null)
+        {
+            return;
+        }
+
+        if (CloudFilterBox == null)
+        {
+            return;
+        }
+
+        var pattern = string.IsNullOrWhiteSpace(CloudFilterBox.Text) ? "*.*" : CloudFilterBox.Text.Trim();
+        _selectedCell.CloudImport.FilterPattern = pattern;
+        UpdateCloudImportSummary(_selectedCell);
+        _selectedCell.MarkAsStale();
+    }
+
+    private void PopulateCloudContainerSuggestions(CloudStorageConnection? connection)
+    {
+        CloudContainerSuggestions.Clear();
+        _ = connection;
+    }
+
+    private void SetCloudContainerText(string? text)
+    {
+        if (CloudContainerBox == null)
+        {
+            return;
+        }
+
+        var previous = _isUpdatingCell;
+        _isUpdatingCell = true;
+        CloudContainerBox.Text = text ?? string.Empty;
+        _isUpdatingCell = previous;
+    }
+
+    private void SetCloudFilterText(string? text)
+    {
+        if (CloudFilterBox == null)
+        {
+            return;
+        }
+
+        var previous = _isUpdatingCell;
+        _isUpdatingCell = true;
+        CloudFilterBox.Text = string.IsNullOrWhiteSpace(text) ? "*.*" : text;
+        _isUpdatingCell = previous;
+    }
+
+    private void ApplyContainerText(string? text)
+    {
+        if (_selectedCell?.CloudImport == null)
+        {
+            return;
+        }
+
+        var normalized = text?.Trim() ?? string.Empty;
+        _selectedCell.CloudImport.ContainerName = normalized;
+
+        if (!string.IsNullOrEmpty(normalized) && !CloudContainerSuggestions.Contains(normalized))
+        {
+            CloudContainerSuggestions.Add(normalized);
+        }
+
+        UpdateCloudImportSummary(_selectedCell);
+        _selectedCell.MarkAsStale();
+    }
+
+    private void UpdateCloudImportSummary(CellViewModel? cell)
+    {
+        if (CloudImportSummary == null)
+        {
+            return;
+        }
+
+        CloudImportSummary.Text = cell?.CloudImport != null
+            ? cell.CloudImport.ToString()
+            : "No cloud import configured.";
     }
 
     private void CellFormula_Changed(object sender, TextChangedEventArgs e)

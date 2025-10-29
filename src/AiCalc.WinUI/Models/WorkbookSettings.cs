@@ -28,6 +28,8 @@ public class WorkbookSettings
 {
     public ObservableCollection<WorkspaceConnection> Connections { get; set; } = new();
 
+    public ObservableCollection<CloudStorageConnection> CloudStorageConnections { get; set; } = new();
+
     public string DefaultImageModel { get; set; } = "stable-diffusion";
 
     public string DefaultTextModel { get; set; } = "gpt-4";

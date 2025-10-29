@@ -65,10 +65,20 @@ public partial class CellViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _isValueOverridden;
+
+    [ObservableProperty]
+    private CloudImportConfiguration? _cloudImport;
     
     public ObservableCollection<CellHistoryEntry> History => _history;
 
     public bool HasHistory => _history.Count > 0;
+
+    partial void OnCloudImportChanged(CloudImportConfiguration? value)
+    {
+        OnPropertyChanged(nameof(HasCloudImport));
+    }
+
+    public bool HasCloudImport => CloudImport != null;
 
     public CellFormat Format
     {
@@ -260,6 +270,7 @@ public partial class CellViewModel : ObservableObject
             Notes = source.Notes;
             Value = source.Value;
             Formula = source.Formula;
+            CloudImport = source.CloudImport?.Clone();
             _history.Clear();
             foreach (var entry in source.History)
             {
@@ -282,6 +293,7 @@ public partial class CellViewModel : ObservableObject
             Notes = definition.Notes;
             Value = definition.Value ?? CellValue.Empty;
             Formula = definition.Formula;
+            CloudImport = definition.CloudImport?.Clone();
         }
 
         _cellObject = CellObjectFactory.CreateFromCellValue(Value);
@@ -333,6 +345,7 @@ public partial class CellViewModel : ObservableObject
             using (SuppressHistory())
             {
                 Value = newValue;
+                CloudImport = null;
             }
 
             IsValueOverridden = HasFormula;

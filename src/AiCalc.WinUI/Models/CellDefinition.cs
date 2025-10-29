@@ -19,4 +19,6 @@ public class CellDefinition
     public string? Notes { get; set; }
 
     public string? SourcePath { get; set; }
+
+    public CloudImportConfiguration? CloudImport { get; set; }
 }
