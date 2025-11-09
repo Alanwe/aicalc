@@ -98,6 +98,26 @@
             Content="☀️ Light"
                         Click="ThemeToggle_Click"
                         ToolTipService.ToolTip="Toggle Light/Dark theme (Ctrl+T)" />
+                <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                    <TextBlock Text="Zoom" FontSize="12" Foreground="{ThemeResource TextSecondaryBrush}" VerticalAlignment="Center" />
+                    <ComboBox x:Name="ZoomComboBox"
+                              Width="88"
+                              PlaceholderText="Custom"
+                              SelectedIndex="2"
+                              SelectionChanged="ZoomComboBox_SelectionChanged">
+                        <ComboBoxItem Content="50%" Tag="0.5" />
+                        <ComboBoxItem Content="75%" Tag="0.75" />
+                        <ComboBoxItem Content="100%" Tag="1" />
+                        <ComboBoxItem Content="125%" Tag="1.25" />
+                        <ComboBoxItem Content="150%" Tag="1.5" />
+                        <ComboBoxItem Content="200%" Tag="2" />
+                    </ComboBox>
+                    <TextBlock x:Name="ZoomDisplayText"
+                               Text="100%"
+                               FontSize="12"
+                               Foreground="{ThemeResource TextSecondaryBrush}"
+                               VerticalAlignment="Center" />
+                </StackPanel>
             </StackPanel>
         </Grid>
 
@@ -211,7 +231,12 @@
                                   HorizontalScrollBarVisibility="Visible" 
                                   VerticalScrollBarVisibility="Visible"
                                   Background="{ThemeResource AppBackgroundBrush}"
-                                  SizeChanged="SpreadsheetScrollViewer_SizeChanged">
+                                  SizeChanged="SpreadsheetScrollViewer_SizeChanged"
+                                  ZoomMode="Enabled"
+                                  MinZoomFactor="0.5"
+                                  MaxZoomFactor="2"
+                                  ViewChanged="SpreadsheetScrollViewer_ViewChanged"
+                                  PointerWheelChanged="SpreadsheetScrollViewer_PointerWheelChanged">
                         <Grid>
                             <Grid x:Name="SpreadsheetGrid" Margin="12" PointerMoved="SpreadsheetGrid_PointerMoved"/>
                             <TextBox x:Name="CellEditBox"
@@ -350,7 +375,7 @@
                                        FontWeight="Normal"
                                        Margin="0,0,0,4" />
                             
-                            <StackPanel Spacing="6">
+                            <StackPanel x:Name="ValuePanel" Spacing="6">
                                 <TextBlock Text="Value" Foreground="{ThemeResource TextPrimaryBrush}" FontSize="13" FontWeight="SemiBold" />
                                 <TextBox x:Name="CellValueBox" 
                                          AcceptsReturn="True" 
@@ -364,7 +389,7 @@
                                         Click="CellValueApply_Click" />
                             </StackPanel>
                             
-                            <StackPanel Spacing="6">
+                            <StackPanel x:Name="FormulaPanel" Spacing="6">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <TextBlock Text="Formula" Foreground="{ThemeResource TextPrimaryBrush}" FontSize="13" FontWeight="SemiBold" />
                                     <TextBlock x:Name="FormulaSyntaxInfo" 
@@ -536,7 +561,7 @@
                                 </ListView>
                             </Border>
                             
-                            <StackPanel Spacing="6">
+                            <StackPanel x:Name="RefreshPanel" Spacing="6">
                                 <TextBlock Text="Refresh" Foreground="{ThemeResource TextPrimaryBrush}" FontSize="13" FontWeight="SemiBold" />
                                 <ComboBox x:Name="AutomationModeBox"
                                           HorizontalAlignment="Stretch"
@@ -560,7 +585,7 @@
                                     Click="EvaluateCell_Click"
                                     HorizontalAlignment="Stretch" />
                             
-                            <StackPanel Spacing="6">
+                            <StackPanel x:Name="NotesPanel" Spacing="6">
                                 <TextBlock Text="Notes" Foreground="{ThemeResource TextPrimaryBrush}" FontSize="13" FontWeight="SemiBold" />
                                 <TextBox x:Name="CellNotesBox" 
                                          AcceptsReturn="True" 
@@ -569,6 +594,10 @@
                                          PlaceholderText="Add notes..."
                                          TextChanged="CellNotes_Changed" />
                             </StackPanel>
+                            
+                            <!-- Dynamic Type-Specific Inspector -->
+                            <ContentControl x:Name="DynamicInspectorContent" 
+                                           Margin="0,16,0,0" />
                         </StackPanel>
                         
                         <StackPanel x:Name="NoCellPanel" Spacing="8">

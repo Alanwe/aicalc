@@ -89,6 +89,13 @@ public sealed partial class MainWindow : Page
     private HeaderContext? _activeRowHeader;
     private double _rowResizeStartY;
     private double _rowResizeInitialHeight;
+    private double _zoomFactor = 1.0;
+    private const double MinZoomFactor = 0.5;
+    private const double MaxZoomFactor = 2.0;
+    private readonly double[] _zoomSteps = new[] { 0.5, 0.75, 1.0, 1.25, 1.5, 2.0 };
+    private bool _hasInitializedZoom;
+    private bool _isUpdatingZoomControl;
+    private bool _suppressZoomViewChanged;
 
     private sealed record TypeIndicatorStyle(string Label, Color Background, Color Foreground);
 
@@ -241,6 +248,7 @@ public sealed partial class MainWindow : Page
     {
         ViewModel = new WorkbookViewModel();
         InitializeComponent();
+        Loaded += MainWindow_Loaded;
         
         DebugLog("MainWindow: Constructor started");
         
@@ -305,6 +313,24 @@ public sealed partial class MainWindow : Page
             : "(null)";
         DebugLog($"POINTER_CLICK: {string.Join("+", pressed)} at {position.X:F1},{position.Y:F1} device={deviceType} source={sourceName}");
         DebugLog($"FOCUS_STATE: FocusedElement={focusName}");
+    }
+
+    private void MainWindow_Loaded(object sender, RoutedEventArgs e)
+    {
+        UpdateZoomDisplay(_zoomFactor);
+        SyncZoomSelector(_zoomFactor);
+
+        if (SpreadsheetScrollViewer != null)
+        {
+            _suppressZoomViewChanged = true;
+            var changed = SpreadsheetScrollViewer.ChangeView(null, null, (float)_zoomFactor, true);
+            if (!changed)
+            {
+                _suppressZoomViewChanged = false;
+            }
+        }
+
+        _hasInitializedZoom = true;
     }
 
     private void SettingsConnections_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -958,6 +984,211 @@ public sealed partial class MainWindow : Page
         UpdateSelectionSummary();
     }
 
+    private void ApplyZoom(double factor)
+    {
+        factor = Math.Clamp(factor, MinZoomFactor, MaxZoomFactor);
+
+        if (Math.Abs(factor - _zoomFactor) < 0.001)
+        {
+            UpdateZoomDisplay(factor);
+            SyncZoomSelector(factor);
+            return;
+        }
+
+        _zoomFactor = factor;
+        UpdateZoomDisplay(factor);
+        SyncZoomSelector(factor);
+
+        if (SpreadsheetScrollViewer != null)
+        {
+            _suppressZoomViewChanged = true;
+            var changed = SpreadsheetScrollViewer.ChangeView(null, null, (float)factor, true);
+            if (!changed)
+            {
+                _suppressZoomViewChanged = false;
+            }
+        }
+
+        ViewModel.StatusMessage = $"Zoom set to {factor * 100:0}%";
+    }
+
+    private void UpdateZoomDisplay(double factor)
+    {
+        if (ZoomDisplayText != null)
+        {
+            ZoomDisplayText.Text = $"{factor * 100:0}%";
+        }
+    }
+
+    private void SyncZoomSelector(double factor)
+    {
+        if (ZoomComboBox == null)
+        {
+            return;
+        }
+
+        _isUpdatingZoomControl = true;
+        try
+        {
+            ComboBoxItem? match = null;
+            foreach (var item in ZoomComboBox.Items.OfType<ComboBoxItem>())
+            {
+                if (double.TryParse(item.Tag?.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var value) &&
+                    Math.Abs(value - factor) < 0.001)
+                {
+                    match = item;
+                    break;
+                }
+            }
+
+            ZoomComboBox.SelectedItem = match;
+            ZoomComboBox.PlaceholderText = match == null ? $"{factor * 100:0}%" : "Custom";
+        }
+        finally
+        {
+            _isUpdatingZoomControl = false;
+        }
+    }
+
+    private void StepZoom(int direction)
+    {
+        if (direction == 0)
+        {
+            return;
+        }
+
+        List<double> options;
+
+        if (ZoomComboBox != null && ZoomComboBox.Items.Count > 0)
+        {
+            options = ZoomComboBox.Items.OfType<ComboBoxItem>()
+                .Select(item => double.TryParse(item.Tag?.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var value) ? value : double.NaN)
+                .Where(value => !double.IsNaN(value))
+                .Distinct()
+                .OrderBy(value => value)
+                .ToList();
+        }
+        else
+        {
+            options = _zoomSteps.ToList();
+        }
+
+        if (options.Count == 0)
+        {
+            return;
+        }
+
+        var current = _zoomFactor;
+        var target = current;
+        const double tolerance = 0.001;
+
+        if (direction > 0)
+        {
+            target = options.FirstOrDefault(value => value > current + tolerance, options[^1]);
+        }
+        else
+        {
+            for (int i = options.Count - 1; i >= 0; i--)
+            {
+                if (options[i] < current - tolerance)
+                {
+                    target = options[i];
+                    break;
+                }
+            }
+
+            if (Math.Abs(target - current) < tolerance)
+            {
+                target = options[0];
+            }
+        }
+
+        ApplyZoom(target);
+    }
+
+    private static bool IsPlusKey(Windows.System.VirtualKey key)
+    {
+        return key == Windows.System.VirtualKey.Add || key == (Windows.System.VirtualKey)187;
+    }
+
+    private static bool IsMinusKey(Windows.System.VirtualKey key)
+    {
+        return key == Windows.System.VirtualKey.Subtract || key == (Windows.System.VirtualKey)189;
+    }
+
+    private void ZoomComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_hasInitializedZoom || _isUpdatingZoomControl)
+        {
+            return;
+        }
+
+        if (sender is ComboBox combo && combo.SelectedItem is ComboBoxItem item &&
+            double.TryParse(item.Tag?.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var factor))
+        {
+            ApplyZoom(factor);
+        }
+    }
+
+    private void SpreadsheetScrollViewer_ViewChanged(object sender, ScrollViewerViewChangedEventArgs e)
+    {
+        if (sender is not ScrollViewer scrollViewer)
+        {
+            return;
+        }
+
+        if (_suppressZoomViewChanged)
+        {
+            if (e.IsIntermediate)
+            {
+                return;
+            }
+
+            _suppressZoomViewChanged = false;
+        }
+
+        var factor = scrollViewer.ZoomFactor;
+        if (Math.Abs(factor - _zoomFactor) < 0.001)
+        {
+            return;
+        }
+
+        _zoomFactor = factor;
+        UpdateZoomDisplay(factor);
+        SyncZoomSelector(factor);
+
+        if (!e.IsIntermediate)
+        {
+            ViewModel.StatusMessage = $"Zoom set to {factor * 100:0}%";
+        }
+    }
+
+    private void SpreadsheetScrollViewer_PointerWheelChanged(object sender, PointerRoutedEventArgs e)
+    {
+        var ctrlState = InputKeyboardSource.GetKeyStateForCurrentThread(Windows.System.VirtualKey.Control);
+        var ctrlPressed = ctrlState.HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
+
+        if (!ctrlPressed)
+        {
+            return;
+        }
+
+        if (sender is not UIElement element)
+        {
+            element = SpreadsheetScrollViewer;
+        }
+
+        if (element == null)
+        {
+            return;
+        }
+
+        var point = e.GetCurrentPoint(element);
+        e.Handled = true;
+        var delta = point.Properties.MouseWheelDelta;
+        StepZoom(delta > 0 ? 1 : -1);
+    }
+
     private static Border CreateTypeIndicatorBadge()
     {
         var label = new TextBlock
@@ -965,31 +1196,36 @@ public sealed partial class MainWindow : Page
             Text = string.Empty,
             FontSize = 8,
             FontWeight = FontWeights.SemiBold,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Stretch,
             Foreground = new SolidColorBrush(Colors.White),
-            IsHitTestVisible = false
+            IsHitTestVisible = false,
+            TextAlignment = TextAlignment.Center,
+            TextLineBounds = Microsoft.UI.Xaml.TextLineBounds.Tight,
+            LineHeight = 8,
+            LineStackingStrategy = LineStackingStrategy.BlockLineHeight
         };
 
         var badge = new Border
         {
             Tag = "TypeIndicator",
-            Width = 12,
-            Height = 10,
-            CornerRadius = new CornerRadius(2),
-            HorizontalAlignment = HorizontalAlignment.Right,
-            VerticalAlignment = VerticalAlignment.Top,
-            Margin = new Thickness(0, 0, -2, 0),
+            Width = 9,
+            Height = 9,
+            CornerRadius = new CornerRadius(4.5),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0),
             Background = new SolidColorBrush(Colors.Transparent),
             BorderBrush = new SolidColorBrush(Colors.Transparent),
             BorderThickness = new Thickness(0),
             Child = label,
-            Padding = new Thickness(0),
+            Padding = new Thickness(0.75, 0.1, 0.75, 0.1),
             Visibility = Visibility.Collapsed,
             IsHitTestVisible = false
         };
 
-        Canvas.SetZIndex(badge, 2);
+        AttachBadgeAlignment(badge, label);
+
         return badge;
     }
 
@@ -1000,32 +1236,111 @@ public sealed partial class MainWindow : Page
             Text = "M",
             FontSize = 8,
             FontWeight = FontWeights.SemiBold,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Stretch,
             Foreground = new SolidColorBrush(Colors.White),
-            IsHitTestVisible = false
+            IsHitTestVisible = false,
+            TextAlignment = TextAlignment.Center,
+            TextLineBounds = Microsoft.UI.Xaml.TextLineBounds.Tight,
+            LineHeight = 8,
+            LineStackingStrategy = LineStackingStrategy.BlockLineHeight
         };
 
         var badge = new Border
         {
             Tag = "ManualIndicator",
-            Width = 12,
-            Height = 10,
-            CornerRadius = new CornerRadius(2),
-            HorizontalAlignment = HorizontalAlignment.Right,
-            VerticalAlignment = VerticalAlignment.Top,
-            Margin = new Thickness(0, 10, -2, 0),
+            Width = 9,
+            Height = 9,
+            CornerRadius = new CornerRadius(4.5),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0),
             Background = new SolidColorBrush(Colors.Black),
             BorderBrush = new SolidColorBrush(Colors.Transparent),
             BorderThickness = new Thickness(0),
             Child = label,
-            Padding = new Thickness(0),
+            Padding = new Thickness(0.75, 0.1, 0.75, 0.1),
             Visibility = Visibility.Collapsed,
             IsHitTestVisible = false
         };
 
-        Canvas.SetZIndex(badge, 1);
+        AttachBadgeAlignment(badge, label);
+
         return badge;
+    }
+
+    private static void AttachBadgeAlignment(Border badge, TextBlock label)
+    {
+        const double horizontalPadding = 0.75d;
+        const double baseVerticalPadding = 0.1d;
+        const double minVerticalPadding = 0d;
+        const double maxVerticalPadding = 0.75d;
+
+        badge.Padding = new Thickness(horizontalPadding, baseVerticalPadding, horizontalPadding, baseVerticalPadding);
+
+        void UpdatePadding()
+        {
+            if (string.IsNullOrEmpty(label.Text))
+            {
+                badge.Padding = new Thickness(horizontalPadding, baseVerticalPadding, horizontalPadding, baseVerticalPadding);
+                return;
+            }
+
+            var actualHeight = label.ActualHeight;
+            var baseline = label.BaselineOffset;
+
+            if (double.IsNaN(actualHeight) || actualHeight <= 0 || double.IsNaN(baseline) || baseline <= 0)
+            {
+                badge.Padding = new Thickness(horizontalPadding, baseVerticalPadding, horizontalPadding, baseVerticalPadding);
+                return;
+            }
+
+            var descent = actualHeight - baseline;
+            var verticalOffset = (baseline - descent) / 2d;
+
+            var top = Math.Clamp(baseVerticalPadding - verticalOffset, minVerticalPadding, maxVerticalPadding);
+            var bottom = Math.Clamp(baseVerticalPadding + verticalOffset, minVerticalPadding, maxVerticalPadding);
+
+            badge.Padding = new Thickness(horizontalPadding, top, horizontalPadding, bottom);
+        }
+
+        void OnLoaded(object sender, RoutedEventArgs e) => UpdatePadding();
+        void OnSizeChanged(object sender, SizeChangedEventArgs e) => UpdatePadding();
+
+        label.Loaded += OnLoaded;
+        label.SizeChanged += OnSizeChanged;
+
+        badge.Loaded += (_, __) => badge.DispatcherQueue?.TryEnqueue(UpdatePadding);
+        badge.Unloaded += (_, __) =>
+        {
+            label.Loaded -= OnLoaded;
+            label.SizeChanged -= OnSizeChanged;
+        };
+    }
+
+    private static T? FindDescendantByTag<T>(DependencyObject? root, object tag) where T : FrameworkElement
+    {
+        if (root == null)
+        {
+            return null;
+        }
+
+        if (root is FrameworkElement fe && Equals(fe.Tag, tag) && fe is T match)
+        {
+            return match;
+        }
+
+        var childCount = VisualTreeHelper.GetChildrenCount(root);
+        for (int i = 0; i < childCount; i++)
+        {
+            var result = FindDescendantByTag<T>(VisualTreeHelper.GetChild(root, i), tag);
+            if (result != null)
+            {
+                return result;
+            }
+        }
+
+        return null;
     }
 
     private Button CreateCellButton(CellViewModel cellVm)
@@ -1077,11 +1392,30 @@ public sealed partial class MainWindow : Page
         grid.Children.Add(valueText);
         Canvas.SetZIndex(valueText, 0);
 
+        var badgesHost = new Grid
+        {
+            Width = 9,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Stretch,
+            Margin = new Thickness(0, 2, 0, 2),
+            IsHitTestVisible = false
+        };
+        badgesHost.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        badgesHost.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        badgesHost.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
         var typeIndicator = CreateTypeIndicatorBadge();
-        grid.Children.Add(typeIndicator);
+        typeIndicator.Margin = new Thickness(0, 0, 0, 1);
+        Grid.SetRow(typeIndicator, 0);
 
         var manualIndicator = CreateManualOverrideBadge();
-        grid.Children.Add(manualIndicator);
+        manualIndicator.Margin = new Thickness(0, 1, 0, 0);
+        Grid.SetRow(manualIndicator, 2);
+
+        badgesHost.Children.Add(typeIndicator);
+        badgesHost.Children.Add(manualIndicator);
+        Canvas.SetZIndex(badgesHost, 2);
+        grid.Children.Add(badgesHost);
 
         // Add a border overlay for formula selection highlighting (initially hidden)
         var selectionBorder = new Border
@@ -1208,13 +1542,14 @@ public sealed partial class MainWindow : Page
             valueText.FontStyle = cellVm.Format.IsItalic ? FontStyle.Italic : FontStyle.Normal;
         }
 
-        var typeIndicator = (button.Content as Grid)?.Children.OfType<Border>().FirstOrDefault(b => "TypeIndicator".Equals(b.Tag));
+        var cellGrid = button.Content as Grid;
+        var typeIndicator = FindDescendantByTag<Border>(cellGrid, "TypeIndicator");
         if (typeIndicator != null)
         {
             UpdateTypeIndicator(cellVm, typeIndicator);
         }
 
-        var manualIndicator = (button.Content as Grid)?.Children.OfType<Border>().FirstOrDefault(b => "ManualIndicator".Equals(b.Tag));
+        var manualIndicator = FindDescendantByTag<Border>(cellGrid, "ManualIndicator");
         if (manualIndicator != null)
         {
             UpdateManualOverrideIndicator(cellVm, manualIndicator);
@@ -1940,6 +2275,13 @@ public sealed partial class MainWindow : Page
                 SetCloudFilterText("*.*");
                 UpdateCloudImportSummary(null);
             }
+        }
+
+        // Show/hide panels based on cell content
+        if (cell != null)
+        {
+            UpdatePanelVisibility(cell);
+            LoadDynamicInspector(cell);
         }
 
         _isUpdatingCell = false;
@@ -5562,6 +5904,27 @@ public sealed partial class MainWindow : Page
             }
             return;
         }
+
+        if (ctrl && IsPlusKey(e.Key))
+        {
+            StepZoom(1);
+            e.Handled = true;
+            return;
+        }
+
+        if (ctrl && IsMinusKey(e.Key))
+        {
+            StepZoom(-1);
+            e.Handled = true;
+            return;
+        }
+
+        if (ctrl && (e.Key == Windows.System.VirtualKey.Number0 || e.Key == Windows.System.VirtualKey.NumberPad0))
+        {
+            ApplyZoom(1.0);
+            e.Handled = true;
+            return;
+        }
         
         // F9: Recalculate all (skip Manual cells per Task 10)
         if (e.Key == Windows.System.VirtualKey.F9)
@@ -6512,5 +6875,44 @@ public sealed partial class MainWindow : Page
         {
             BuildSpreadsheetGrid(ViewModel.SelectedSheet);
         }
+    }
+
+    // Panel Visibility Management
+    private void UpdatePanelVisibility(CellViewModel cell)
+    {
+        // Value panel - always show
+        if (ValuePanel != null)
+            ValuePanel.Visibility = Visibility.Visible;
+        
+        // Formula panel - only show if cell has formula
+        if (FormulaPanel != null)
+            FormulaPanel.Visibility = cell.HasFormula ? Visibility.Visible : Visibility.Collapsed;
+        
+        // Cloud Import panel - only show for Directory type cells
+        if (CloudImportPanel != null)
+            CloudImportPanel.Visibility = cell.Value.ObjectType == CellObjectType.Directory ? Visibility.Visible : Visibility.Collapsed;
+        
+        // Refresh panel - only show if cell has formula
+        if (RefreshPanel != null)
+            RefreshPanel.Visibility = cell.HasFormula ? Visibility.Visible : Visibility.Collapsed;
+        
+        // Notes panel - always show
+        if (NotesPanel != null)
+            NotesPanel.Visibility = Visibility.Visible;
+    }
+    
+    // Dynamic Inspector Loading
+    private void LoadDynamicInspector(CellViewModel cell)
+    {
+        // Simple placeholder showing cell type - inspectors can be enhanced later
+        var typeInfo = new TextBlock
+        {
+            Text = $"📋 Cell Type: {GetCellObjectTypeLabel(cell.Value.ObjectType)}",
+            FontSize = 13,
+            Foreground = new SolidColorBrush(Colors.LightGray),
+            Margin = new Thickness(0, 8, 0, 0)
+        };
+        
+        DynamicInspectorContent.Content = typeInfo;
     }
 }
